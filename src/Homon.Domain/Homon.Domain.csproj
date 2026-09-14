@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The domain model. Deliberately dependency-free: no EF Core, no ASP.NET Identity,
+    no NuGet references at all. Persistence concerns live in Homon.Infrastructure.
+  -->
+
+</Project>

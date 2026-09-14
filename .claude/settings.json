@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./ci/run-ci.sh:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker volume ls:*)",
+      "Bash(docker network ls:*)",
+      "Bash(docker compose -p homon-ci -f ci/compose.ci.yaml up:*)",
+      "Bash(docker compose -p homon-ci -f ci/compose.ci.yaml ps:*)",
+      "Bash(docker compose -p homon-ci -f ci/compose.ci.yaml logs:*)",
+      "Bash(docker compose -p homon-ci -f ci/compose.ci.yaml stop:*)"
+    ],
+    "deny": [
+      "Bash(docker rm:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker kill:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker container rm:*)",
+      "Bash(docker container prune:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker volume prune:*)",
+      "Bash(docker network rm:*)",
+      "Bash(docker network prune:*)",
+      "Bash(docker image rm:*)",
+      "Bash(docker image prune:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker builder prune:*)",
+      "Bash(docker compose down:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/ci/guard-docker.py"
+          }
+        ]
+      }
+    ]
+  }
+}

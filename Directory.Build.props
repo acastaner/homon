@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Settings shared by every .NET project in this repository — everything under src/ and
+    tests/. MSBuild walks up the directory tree regardless of where a project sits.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      The XML documentation file. Nothing here ships to NuGet, but .NET 10's OpenAPI
+      generator reads doc comments out of it, and /api/v1/openapi.json is the API's
+      published contract for tooling with no source access (the backup scripts, for one).
+      A <summary> on a wire type is therefore reader-facing documentation; CS1591 is
+      silenced because the goal is documenting what is *published*, not every public member.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Greenfield repository: start strict rather than bolt this on later. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+  </PropertyGroup>
+
+</Project>

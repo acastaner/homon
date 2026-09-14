@@ -1,0 +1,69 @@
+# The local CI database.
+#
+# `ci/run-ci.sh api` reproduces the `api` job in .github/workflows/build.yml on this
+# machine, and this file is the local stand-in for that job's PostgreSQL *service
+# container*. Same image, same database name, same role, same password, same healthcheck —
+# so a suite that is green here and red there is telling you about your code, not about a
+# difference between two PostgreSQLs.
+#
+# ┌─────────────────────────────────────────────────────────────────────────────────────┐
+# │ THIS PROJECT IS THE ONLY THING THE CI SCRIPTS MAY TOUCH.                            │
+# │                                                                                     │
+# │ Always address it as `docker compose -p homon-ci -f ci/compose.ci.yaml …`. The      │
+# │ project name is the identity: `ci/guard-docker.py` refuses every destructive docker │
+# │ command that does not carry `-p homon-ci`, and the development machine runs          │
+# │ containers belonging to other projects — including the shared PostgreSQL that holds  │
+# │ Homon's own development database. See docs/postgres-setup-dev.md §0.               │
+# └─────────────────────────────────────────────────────────────────────────────────────┘
+#
+# This is NOT the development database. It starts empty and `migrate` builds the schema.
+# Nothing here is precious and `run-ci.sh --reset` may throw all of it away.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    # One server holds a database per test class, created and dropped inside a run that
+    # reaches many-way parallelism. PostgreSQL's default max_connections is 100, and the
+    # failure a low budget produces is "53300: sorry, too many clients already", which
+    # surfaces as a scatter of unrelated test failures. 200 costs a few MB of shared memory.
+    #
+    # Editing this line changes the service definition, so the next `compose up -d`
+    # RECREATES the container. The `ci-postgres-data` volume survives, so nothing is lost.
+    command: ['postgres', '-c', 'max_connections=200']
+    # Not `unless-stopped`: this database exists for the length of a test run, and a CI
+    # container that comes back on every host reboot is a surprise, not a service.
+    restart: 'no'
+    environment:
+      POSTGRES_DB: homon
+      POSTGRES_USER: homon
+      # Not a secret, and deliberately not read from the root .env — that file holds the
+      # *development* password, and the CI path must not depend on it. This database is
+      # bound to loopback and discarded. build.yml hardcodes the same three values.
+      POSTGRES_PASSWORD: homon
+    ports:
+      # NOT 5432, and not Chronolectum's 55432 either: both are taken on the development
+      # machine. Loopback-bound: nothing off this machine has any business reaching a test
+      # database.
+      - '127.0.0.1:${HOMON_CI_DB_PORT:-55433}:5432'
+    volumes:
+      # /var/lib/postgresql, not /var/lib/postgresql/data — PostgreSQL 18 made PGDATA
+      # version-specific and the image refuses to start when it finds content at the old
+      # path. See the same note in docker-compose.yml and compose.prod.yaml.
+      - ci-postgres-data:/var/lib/postgresql
+    healthcheck:
+      # Identical to the service-container options in build.yml.
+      test: ['CMD-SHELL', 'pg_isready -U homon -d homon']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # End-to-end testing does NOT attach here. Playwright starts the API and the built SPA
+  # itself, as host processes, out of the artifacts the `web` and `api` suites have already
+  # built — see `webServer` in src/Homon.Web/playwright.config.ts. It reaches THIS container
+  # on the published loopback port above. A Compose shape built from the production
+  # Dockerfiles would give production-image parity (nginx, the real entrypoints) at the cost
+  # of a full publish on every gate run; if image parity ever becomes the question, that is
+  # still the right answer to it.
+
+volumes:
+  ci-postgres-data:

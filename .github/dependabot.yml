@@ -1,0 +1,49 @@
+# Scheduled dependency-update PRs. Security *alerts* are a repository setting and work
+# independently of this file; this is what stops dependencies drifting between advisories.
+#
+# Weekly and grouped, so review attention is bounded: one grouped PR per ecosystem per week
+# is what a person can actually read. Each PR runs build.yml on GitHub (it triggers on
+# pull_request) and should also be proved by `./ci/run-ci.sh` locally before merging — the
+# local gate is the one that refuses a run with skipped tests.
+version: 2
+updates:
+  # The React SPA — the repository's only npm project.
+  - package-ecosystem: npm
+    directory: /src/Homon.Web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      npm-production:
+        dependency-type: production
+        update-types: [minor, patch]
+      npm-development:
+        dependency-type: development
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+
+  # NuGet central package management — versions live in Directory.Packages.props.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      nuget-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # The actions pinned in .github/workflows/*.yml. An explicit limit, because the default
+  # of 5 silently saturates and suppresses further action bumps with no signal.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 8
+    commit-message:
+      prefix: "chore(ci)"

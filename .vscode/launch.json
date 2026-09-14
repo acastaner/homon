@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "compounds": [
+    {
+      // F5 target: the API under the debugger and the Vite dev server beside it.
+      "name": "Dev: full stack with HMR (browse :5300)",
+      "configurations": ["Homon.Api", "Homon.Web (Vite dev server)"],
+      "preLaunchTask": "dev: prepare",
+      "stopAll": true
+    }
+  ],
+  "configurations": [
+    {
+      // Reads the connection string and the administrator credentials from user secrets,
+      // so no credential appears here. See docs/postgres-setup-dev.md.
+      "name": "Homon.Api",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/Homon.Api/bin/Debug/net10.0/Homon.Api.dll",
+      "cwd": "${workspaceFolder}/src/Homon.Api",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5301"
+      },
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      // Vite proxies /api to Kestrel on :5301, so the browser sees one origin and CORS
+      // never engages locally. Browse :5300, never :5301.
+      "name": "Homon.Web (Vite dev server)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/src/Homon.Web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "env": {
+        "FORCE_COLOR": "0",
+        "NO_COLOR": "1"
+      },
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    }
+  ]
+}

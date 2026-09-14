@@ -1,0 +1,129 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "db: check",
+      "detail": "Verify PostgreSQL is reachable on localhost:5432. Never starts it: on the maintainer's machine the development database lives in a shared container another project owns — so this task only checks and tells you what to start yourself. See docs/postgres-setup-dev.md.",
+      "type": "shell",
+      "command": "timeout 2 bash -c 'exec 3<>/dev/tcp/localhost/5432' 2>/dev/null || { echo 'PostgreSQL is NOT reachable on localhost:5432. See docs/postgres-setup-dev.md for which container to start.'; exit 1; }",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "client: install",
+      "detail": "npm ci in src/Homon.Web when node_modules is absent. The .NET build never touches the SPA, so a fresh clone needs this before the Vite dev server can start.",
+      "type": "shell",
+      "command": "[ -d node_modules ] || npm ci",
+      "options": {
+        "cwd": "${workspaceFolder}/src/Homon.Web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "client: build",
+      "detail": "tsc -b && vite build — type-checks the SPA and emits dist/. Not needed to run the dev server; this is the verification gate.",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/src/Homon.Web"
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build: solution",
+      "detail": "dotnet build Homon.sln. Also the formatting gate — IDE0055 is an error and TreatWarningsAsErrors is on, because dotnet format is broken on this SDK.",
+      "type": "shell",
+      "command": "dotnet build Homon.sln",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": ["$msCompile"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "dev: prepare",
+      "detail": "Everything that must happen before the hosts start: confirm the database is reachable, restore the SPA's dependencies if missing, then build the solution. Aborts the launch if PostgreSQL is down.",
+      "dependsOrder": "sequence",
+      "dependsOn": ["db: check", "client: install", "build: solution"],
+      "problemMatcher": []
+    },
+    {
+      "label": "client: dev server",
+      "detail": "Vite dev server on http://localhost:5300 with HMR, proxying /api to Kestrel on :5301. Background task — use this when you want Vite in a plain terminal instead of the 'Dev: full stack with HMR' compound.",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/src/Homon.Web",
+        "env": {
+          "FORCE_COLOR": "0",
+          "NO_COLOR": "1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "fileLocation": ["relative", "${workspaceFolder}/src/Homon.Web"],
+        "pattern": {
+          "regexp": "^([^\\s].*)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE v",
+          "endsPattern": "ready in"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "client: lint",
+      "detail": "oxlint over the SPA.",
+      "type": "shell",
+      "command": "npm run lint",
+      "options": {
+        "cwd": "${workspaceFolder}/src/Homon.Web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "client: test",
+      "detail": "Vitest + Testing Library, single run.",
+      "type": "shell",
+      "command": "npm run test",
+      "options": {
+        "cwd": "${workspaceFolder}/src/Homon.Web"
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "api: test",
+      "detail": "dotnet test Homon.sln — xUnit on VSTest. Database-backed tests skip unless HOMON_TEST_CONNECTION is set; ./ci/run-ci.sh api is the run that proves them.",
+      "type": "shell",
+      "command": "dotnet test Homon.sln",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": ["$msCompile"],
+      "group": "test"
+    }
+  ]
+}

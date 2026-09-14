@@ -1,0 +1,7 @@
+/*
+ * DELIBERATELY EMPTY beyond the Tailwind import. Phase 0 ships the toolchain and no style:
+ * no theme tokens, no fonts, no utility classes on any element. The design pass
+ * (docs/design-brief.md) owns everything that goes in here — `@theme`, the colour ramps for
+ * up/unstable/down, dark mode — and starts from a blank sheet on purpose.
+ */
+@import 'tailwindcss';

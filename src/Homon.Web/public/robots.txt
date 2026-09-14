@@ -1,0 +1,3 @@
+# Homon is a private household dashboard. Nothing here is for indexing.
+User-agent: *
+Disallow: /

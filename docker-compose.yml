@@ -1,0 +1,40 @@
+# Local development dependencies.
+#
+# Development runs the API and the Vite dev server natively (`dotnet run` and `npm run dev`);
+# only PostgreSQL is containerised. Production is a different topology entirely — see
+# compose.prod.yaml.
+#
+# ┌─────────────────────────────────────────────────────────────────────────────────────┐
+# │ ⚠ ON THE MAINTAINER'S MACHINE THIS SERVICE IS NOT USED.                             │
+# │                                                                                     │
+# │ Homon shares a PostgreSQL container that a sibling project already publishes on     │
+# │ host port 5432. One server, several databases, one role each. Starting the service  │
+# │ below there would simply fail to bind 5432. See docs/postgres-setup-dev.md, which   │
+# │ also names the commands that must never be run against the shared container.       │
+# │                                                                                     │
+# │ On any other machine, `docker compose up -d` here is the whole database setup.      │
+# └─────────────────────────────────────────────────────────────────────────────────────┘
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homon
+      POSTGRES_USER: homon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — see .env.example}
+    ports:
+      - '5432:5432'
+    volumes:
+      # /var/lib/postgresql, not /var/lib/postgresql/data — PostgreSQL 18 made PGDATA
+      # version-specific and the image refuses to start when it finds content at the old
+      # path. See compose.prod.yaml for the full note.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U homon -d homon']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

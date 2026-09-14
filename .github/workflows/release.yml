@@ -1,0 +1,119 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Deliberately NOT declared workflow-wide. Each job gets only what it needs, below: the
+# image builder must never hold `contents: write`, and the release publisher must never
+# hold `packages: write`.
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-push-images:
+    name: Build and push the ${{ matrix.name }} image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read    # checkout
+      packages: write   # push to GHCR
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: src/Homon.Api/Dockerfile
+          - name: web
+            dockerfile: src/Homon.Web/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      # GHCR paths are case-sensitive and must be lowercase; github.repository_owner is
+      # not guaranteed to be.
+      - name: Compute the lowercase image owner
+        id: vars
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # The tag as the application should print it: `v0.1.0` -> `0.1.0`. docker/
+      # metadata-action's type=semver strips the `v` from the image tag, so anything that
+      # names a version elsewhere — the footer, the release notes, deploy.sh's argument —
+      # must strip it the same way.
+      - name: Compute the version (tag name without the leading v)
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.vars.outputs.owner }}/homon-${{ matrix.name }}
+          # `type=raw,value=latest` is unconditional: every tag push moves `latest`,
+          # including a hotfix cut from an older line. It stays because deploy.sh pins an
+          # explicit version into .env on every deploy, so `latest` is a convenience for a
+          # first bring-up and never what a running host resolves.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The SPA is a static bundle behind nginx, so anything it needs about its
+          # environment has to be inlined by Vite at build time. `VITE_APP_VERSION` is the
+          # only such value; the API is reached at the relative `/api/v1`, so there is no
+          # hostname to inline. Harmless for the api image, which declares no such arg.
+          build-args: |
+            VITE_APP_VERSION=${{ steps.version.outputs.value }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-release:
+    name: Publish the GitHub Release
+    needs: build-push-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the Release
+    steps:
+      - name: Compute the version (tag name without the leading v)
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          body: |
+            Images published to GHCR. **Note the image tags carry no `v` prefix.**
+
+            - `ghcr.io/${{ github.repository_owner }}/homon-api:${{ steps.version.outputs.value }}` (and `:latest`)
+            - `ghcr.io/${{ github.repository_owner }}/homon-web:${{ steps.version.outputs.value }}` (and `:latest`)
+
+            The `api` image is also the migrator: the `migrator` service in
+            `compose.prod.yaml` runs the same image with `command: ["migrate"]`, so the
+            migration code and the application code can never be different builds.
+
+            Deploy on the production host with:
+
+            ```
+            ./deploy.sh ${{ steps.version.outputs.value }}
+            ```
+
+            It takes the bare version, not the tag name. See `docs/deployment-runbook.md`.

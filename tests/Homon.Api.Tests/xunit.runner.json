@@ -1,0 +1,5 @@
+{
+  "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+  "$comment": "Test collections run in PARALLEL. Every [DatabaseFact] class gets its own database, cloned from a migrated template in tens of milliseconds (TestDatabase, DatabaseBackedFactory) and dropped when the class finishes. What is shared is the server process, never any data, so there is nothing to race. Do not turn this off to fix a flake without first naming the process-level state the two classes actually share — a static, a fixed path, a fixed port, an environment variable — because a per-class database already rules out the database.",
+  "parallelizeTestCollections": true
+}

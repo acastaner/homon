@@ -1,0 +1,176 @@
+# Production topology.
+#
+# Three long-running services and one one-shot, published on ONE port:
+#
+#   <host>:${HOMON_HOST_PORT}/       -> web   (nginx: the bundle)
+#   <host>:${HOMON_HOST_PORT}/api/   -> web   -> api  (proxied inside the Compose network)
+#
+# The SPA container's nginx does the `/api/` split (src/Homon.Web/nginx.conf), so the api
+# and postgres containers publish nothing at all. Requests are same-origin: CORS never
+# engages, and the session cookie is host-only to the single name that serves the whole
+# application. Whatever sits in front — a reverse proxy with the household's trusted-network
+# rules, a WAF, nothing on a LAN — only has to know one port.
+#
+# Every value below comes from the environment. Nothing secret is committed:
+#   docker compose -f compose.prod.yaml --env-file .env up -d
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homon
+      POSTGRES_USER: homon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      # A BIND MOUNT under the compose directory, not a named volume, and that is the one
+      # deliberate departure from the sibling project this file is modelled on. The host
+      # this runs on backs up bind mounts under its docker-apps directory with restic and
+      # backs up no named volume — so a named volume here would be the one piece of state
+      # in the stack that no backup covers. ./data is gitignored.
+      #
+      # Mounted at /var/lib/postgresql, NOT at /var/lib/postgresql/data. PostgreSQL 18
+      # made PGDATA version-specific — /var/lib/postgresql/18/docker — and the image
+      # refuses to start outright when it finds content at the old mount. Changing this
+      # line on a host that already has data is NOT a mount edit: the route is a pg_dump, a
+      # fresh directory, and a restore.
+      - ./data/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U homon -d homon']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No published port, on purpose — not even on loopback. Nothing outside this Compose
+    # network has any business reaching the database.
+
+  # Applies pending migrations, then exits. It is the *api image* with a different
+  # command: the ENTRYPOINT is `dotnet Homon.Api.dll`, and `migrate` is a verb that host
+  # already understands (src/Homon.Api/Program.cs). One image therefore means the migration
+  # code and the application code are the same build, always.
+  #
+  # The connection string is the only configuration it needs. The CLI verbs build a plain
+  # host and never run it, so the ValidateOnStart() validators on the email options never
+  # fire — which is what makes those verbs usable from a recovery container that has
+  # nothing but the connection string.
+  #
+  # restart: "no" is load-bearing. This container is *meant* to exit 0; the default
+  # restart policy would take a completed migration and run it again on every host reboot.
+  migrator:
+    image: ghcr.io/acastaner/homon-api:${HOMON_VERSION:-latest}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Homon: >-
+        Host=postgres;Port=5432;Database=homon;Username=homon;Password=${POSTGRES_PASSWORD}
+    command: ["migrate"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    image: ghcr.io/acastaner/homon-api:${HOMON_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Homon: >-
+        Host=postgres;Port=5432;Database=homon;Username=homon;Password=${POSTGRES_PASSWORD}
+
+      # The one public origin, as the family reaches it. Builds the links alert emails carry.
+      FrontEnd__PublicBaseUrl: ${HOMON_PUBLIC_ORIGIN:?set HOMON_PUBLIC_ORIGIN}
+
+      # Readers are anonymous by default; "true" closes every read endpoint to anyone
+      # without a session. The reverse proxy's network rules are the intended gate.
+      Auth__RequireSignInForReaders: ${HOMON_REQUIRE_SIGN_IN_FOR_READERS:-false}
+
+      Email__ResendApiToken: ${RESEND_API_TOKEN:?set RESEND_API_TOKEN}
+      Email__FromAddress: ${HOMON_FROM_ADDRESS:?set HOMON_FROM_ADDRESS}
+      Email__FromName: Homon
+      # Comma-separated in .env; the __0, __1 spelling is how .NET binds an array from
+      # the environment, so the list is split here. Extend the pattern for a third address.
+      Email__AlertRecipients__0: ${HOMON_ALERT_RECIPIENT_1:?set HOMON_ALERT_RECIPIENT_1}
+      Email__AlertRecipients__1: ${HOMON_ALERT_RECIPIENT_2:-}
+
+      # The administrator lives here and nowhere else. It has no database row, so a
+      # database compromise yields nothing that can sign in as one. Only the hash is held;
+      # mint it with `dotnet run --project src/Homon.Api -- hash-password`.
+      Administrator__Email: ${HOMON_ADMIN_EMAIL:?set HOMON_ADMIN_EMAIL}
+      Administrator__PasswordHash: ${HOMON_ADMIN_PASSWORD_HASH:?set HOMON_ADMIN_PASSWORD_HASH}
+
+      DataProtection__KeyRingPath: /keys
+
+      # The Compose network the web container proxies from, as seen by Kestrel. With it
+      # set, X-Forwarded-For from nginx is trusted (one hop, no more) and the sign-in rate
+      # limiter partitions on the real client. The 172.16.0.0/12 default covers Docker's
+      # default bridge pools; the variable exists so a host with a custom pool can narrow
+      # it. System.Net.IPNetwork.Parse rejects a value with host bits set — 172.18.0.1/16
+      # throws at startup where 172.18.0.0/16 is accepted.
+      ReverseProxy__KnownNetwork: ${HOMON_PROXY_NETWORK:-172.16.0.0/12}
+
+      # Read back at GET /api/v1/meta as `release`, so which build is answering is a
+      # question with an answer.
+      Homon__Version: ${HOMON_VERSION:-dev}
+
+      # JSON, one object per line, with scopes on: every line the API emits then carries the
+      # hosting scope's TraceId — the same 32-hex value the X-Request-Id header and a problem
+      # body's traceId carry, so an id greps straight out of `docker compose logs api`.
+      Logging__Console__FormatterName: json
+      Logging__Console__FormatterOptions__IncludeScopes: "true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      # busybox wget, not curl: the aspnet:10.0-alpine base has no curl.
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:8080/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - dataprotection-keys:/keys
+    # ICMP. The ping probe (Monitoring module, plan 002) needs an unprivileged ICMP socket:
+    # .NET's Ping on Linux opens SOCK_DGRAM/IPPROTO_ICMP, which the kernel allows only for
+    # groups inside net.ipv4.ping_group_range — and the default range is empty. Set here
+    # rather than with CAP_NET_RAW because this is a rootless Docker deployment and a
+    # namespaced sysctl is the one knob that works there. Harmless before the module lands.
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    # No published port: reached through `web` only.
+
+  web:
+    image: ghcr.io/acastaner/homon-web:${HOMON_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      # The one published port. The bind address defaults to every interface because the
+      # intended host publishes its containers that way and the network in front of it
+      # (a reverse proxy's trusted-network rules, or a LAN) is the access control; set
+      # HOMON_BIND_ADDRESS=127.0.0.1 on a host whose reverse proxy runs locally.
+      - '${HOMON_BIND_ADDRESS:-0.0.0.0}:${HOMON_HOST_PORT:-8102}:80'
+
+volumes:
+  # The data-protection key ring: session cookies and stored probe secrets are unreadable
+  # without it, so it must survive a redeploy. Small, and not covered by the host's restic
+  # (named volume) — docs/deployment-runbook.md says how to export it.
+  dataprotection-keys:

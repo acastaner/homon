@@ -1,0 +1,215 @@
+name: build
+
+on:
+  # Two triggers, and the split is deliberate.
+  #
+  # The gate that the maintainer runs on every change is `./ci/run-ci.sh` locally: it
+  # reproduces this file step for step against the same postgres:18-alpine, and it fails if
+  # any test skipped, which this workflow does not check. `workflow_dispatch` runs the same
+  # jobs against any branch or tag when somebody wants a specific commit proved green from
+  # somewhere that is not the maintainer's machine.
+  #
+  # `pull_request` is here because this repository is public: an outside contributor has no
+  # `ci/run-ci.sh` on the maintainer's machine, and a pull request with no check at all is
+  # a review that starts by asking "did you run the tests". Dependabot's pull requests cost
+  # the same minutes; that is the trade.
+  #
+  # KNOW THE COST BEFORE PUSHING A TAG. release.yml triggers on `v*.*.*` independently of
+  # this file and runs no tests, so a tag publishes two images to GHCR with nothing between
+  # a red suite and a release. Run `./ci/run-ci.sh` before pushing one.
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Which suites to run
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - web
+          - api
+          - e2e
+
+# This workflow reads the repository and writes nothing. Say so: the default token
+# permissions are a repository-wide setting, and a compromised dependency in `npm ci` would
+# inherit whatever that setting happens to be.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  web:
+    name: Front end — build, lint, test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'web' }}
+    defaults:
+      run:
+        working-directory: src/Homon.Web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Homon.Web/package-lock.json
+
+      # `npm ci`, never `npm install` — a deterministic install against the committed
+      # lockfile, and it fails loudly when package.json and the lockfile disagree.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` is `tsc -b && vite build`, so this is the typecheck as well.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
+
+  api:
+    name: Backend — build and the full suite against PostgreSQL
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'api' }}
+
+    # The whole point of this job. Without a database, DatabaseFactAttribute skips the
+    # database-backed tests and a green run proves very little. postgres:18-alpine matches
+    # compose.prod.yaml, so CI and production disagree about nothing.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: homon
+          POSTGRES_USER: homon
+          POSTGRES_PASSWORD: homon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homon -d homon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Not a secret: this database exists for the length of one job, on a runner nothing
+      # else can reach. A real credential here would be worse than useless — repository
+      # secrets are not available to workflows triggered by a pull request from a fork.
+      HOMON_TEST_CONNECTION: >-
+        Host=localhost;Port=5432;Database=homon;Username=homon;Password=homon
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Homon.sln
+
+      # TreatWarningsAsErrors and EnforceCodeStyleInBuild are both on in
+      # Directory.Build.props, so this step is the formatting gate too.
+      - name: Build
+        run: dotnet build Homon.sln --configuration Release --no-restore
+
+      # Nothing applies migrations on startup, deliberately (Program.cs).
+      - name: Apply migrations
+        run: dotnet run --project src/Homon.Api --configuration Release --no-build --no-launch-profile -- migrate
+        env:
+          ConnectionStrings__Homon: ${{ env.HOMON_TEST_CONNECTION }}
+
+      - name: Test
+        run: >-
+          dotnet test Homon.sln --configuration Release --no-build
+          --logger "trx;LogFileName=homon.trx"
+          --results-directory ${{ github.workspace }}/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/test-results
+          if-no-files-found: warn
+
+  e2e:
+    name: End to end — Playwright against the real stack
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'e2e' }}
+
+    # Same image, database, role and password as the `api` job above, for the same reason.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: homon
+          POSTGRES_USER: homon
+          POSTGRES_PASSWORD: homon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homon -d homon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      HOMON_E2E_CONNECTION: >-
+        Host=localhost;Port=5432;Database=homon;Username=homon;Password=homon
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Homon.Web/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: src/Homon.Web
+
+      # `--with-deps` here and not in ci/run-ci.sh: a runner is disposable and this installs
+      # the shared libraries Chromium needs through apt, which a developer's agents have no
+      # sudo for and a desktop does not need.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: src/Homon.Web
+
+      - name: Build the API
+        run: dotnet build src/Homon.Api --configuration Release
+
+      - name: Apply migrations
+        run: >-
+          dotnet run --project src/Homon.Api --configuration Release --no-build
+          --no-launch-profile -- migrate
+        env:
+          ConnectionStrings__Homon: ${{ env.HOMON_E2E_CONNECTION }}
+
+      # Playwright starts and stops both servers itself; see playwright.config.ts.
+      - name: Test
+        run: npx playwright test
+        working-directory: src/Homon.Web
+
+      # Traces and screenshots are retained on failure only, so this artifact is small on a
+      # green run and is the whole diagnosis on a red one.
+      - name: Upload the Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            src/Homon.Web/playwright-report
+            src/Homon.Web/e2e/.results
+          if-no-files-found: warn
