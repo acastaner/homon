@@ -50,6 +50,18 @@ public class HomonApiFactory : WebApplicationFactory<Program>
                 // uses its own factory with a low limit to exercise rejection.
                 ["SignInThrottle:PermitLimit"] = "1000",
                 ["SignInThrottle:WindowMinutes"] = "1",
+
+                // This factory's connection string above is deliberately unreachable. Once
+                // AddHostedService<ProbeScheduler>() is registered, any test host built from
+                // this factory would otherwise start ticking against that unreachable
+                // database the moment the host starts — a connection attempt and a logged
+                // error on every unrelated test in the suite. ApiDatabaseFactory calls
+                // base.ConfigureWebHost first, so it inherits both keys automatically; every
+                // scheduler/retention test in this plan constructs ProbeScheduler/
+                // ProbeObservationRetentionService by hand and calls TickAsync/SweepAsync
+                // directly, never through the hosted loop.
+                ["Monitoring:SchedulerEnabled"] = "false",
+                ["Monitoring:RetentionEnabled"] = "false",
             }));
     }
 }

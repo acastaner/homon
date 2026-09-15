@@ -1,10 +1,12 @@
 using Homon.Infrastructure.Administration;
 using Homon.Infrastructure.Email;
+using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Resend;
 
@@ -12,13 +14,12 @@ namespace Homon.Infrastructure;
 
 /// <summary>
 /// Registers everything Homon needs to reach the outside world: the database, the email
-/// transport, and the configuration-supplied administrator.
+/// transport, the configuration-supplied administrator, and the monitoring probes/scheduler.
 /// </summary>
 /// <remarks>
 /// Authentication schemes, cookie settings, and authorisation policies are deliberately
 /// <i>not</i> registered here — they live in the API host so the whole auth story can be
-/// read in one place. The probe runners and the scheduler will register here when the
-/// Monitoring module lands.
+/// read in one place.
 /// </remarks>
 public static class InfrastructureServiceCollectionExtensions
 {
@@ -34,13 +35,14 @@ public static class InfrastructureServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         // Registered once, here, so every clock read in the infrastructure and API layers
-        // goes through the same seam. Plans 002/003's scheduler/probe runners should reuse
-        // this registration rather than adding their own.
+        // goes through the same seam. ProbeScheduler/ProbeObservationRetentionService below
+        // reuse this registration rather than adding their own.
         services.AddSingleton(TimeProvider.System);
 
         services.AddHomonDatabase();
         services.AddHomonEmail(configuration, isProduction);
         services.AddAdministrator(configuration);
+        services.AddHomonMonitoring(configuration);
 
         return services;
     }
@@ -132,5 +134,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IPasswordHasher<AdministratorIdentity>,
             PasswordHasher<AdministratorIdentity>>();
         services.AddSingleton<AdministratorAuthenticator>();
+    }
+
+    private static void AddHomonMonitoring(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<MonitoringOptions>()
+            .Bind(configuration.GetSection(MonitoringOptions.SectionName))
+            .ValidateOnStart();
+
+        // Scoped, not singleton: 003's HttpProbeRunner needs a scoped ISecretProtector, and
+        // registering every IProbeRunner the same way means the scheduler never has to care
+        // which lifetime a given kind picked.
+        services.AddSingleton<IIcmpPinger, SystemIcmpPinger>();
+        services.AddScoped<IProbeRunner, PingProbeRunner>();
+
+        services.AddHostedService<ProbeScheduler>();
+        services.AddHostedService<ProbeObservationRetentionService>();
     }
 }

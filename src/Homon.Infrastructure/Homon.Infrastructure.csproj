@@ -22,10 +22,27 @@
     </PackageReference>
     <!-- Read by the design-time factory so `dotnet ef` shares the API's connection string. -->
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <!--
+      This project uses plain Microsoft.NET.Sdk, not Microsoft.NET.Sdk.Web (that is
+      Homon.Api.csproj only), so it gets no FrameworkReference to Microsoft.AspNetCore.App —
+      BackgroundService, IHostedService and AddHostedService<T>() all live in this package and
+      would not otherwise resolve. Needed for ProbeScheduler/ProbeObservationRetentionService.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Resend" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      ProbeScheduler.TickAsync and ProbeObservationRetentionService.SweepAsync are internal —
+      the tests that call them directly (ProbeSchedulerTests, ProbeObservationRetentionServiceTests)
+      live in Homon.Api.Tests, a different assembly. Modelled on Homon.Api.csproj's own
+      InternalsVisibleTo to the same test project.
+    -->
+    <InternalsVisibleTo Include="Homon.Api.Tests" />
   </ItemGroup>
 
 </Project>
