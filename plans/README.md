@@ -23,7 +23,7 @@ reviews and merges the work.
 | 010 | planned | M | — | Weather widget |
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
 | 012 | planned | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
-| 013 | planned | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
+| 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
