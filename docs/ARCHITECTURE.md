@@ -121,8 +121,10 @@ development machine never mails anyone. A Production host without a token refuse
 `HOMON_TEST_CONNECTION` the `[DatabaseFact]` tests skip and `dotnet test` still exits 0.
 Each test class gets its own database cloned from a migrated template (`TestDatabase`), so
 the collections run in parallel and share no data. GitHub's `build.yml` is the same three
-jobs, on `pull_request` (the repository is public — a contributor needs a check) and
-`workflow_dispatch`; `release.yml` publishes images on a tag and runs no tests.
+jobs, and runs only when asked: `workflow_dispatch`, or `workflow_call` from `release.yml`,
+which runs it on a `v*.*.*` tag and pushes no image unless it passes. There is no
+`pull_request` trigger — Dependabot's pull requests fired it on every bump — so a pull
+request is proved locally or by a dispatch against its branch.
 
 `ci/guard-docker.py` is a Claude Code hook that blocks destructive docker commands outside
 `homon-ci`, because the development database lives in a container another project owns.

@@ -2,9 +2,10 @@
 # independently of this file; this is what stops dependencies drifting between advisories.
 #
 # Weekly and grouped, so review attention is bounded: one grouped PR per ecosystem per week
-# is what a person can actually read. Each PR runs build.yml on GitHub (it triggers on
-# pull_request) and should also be proved by `./ci/run-ci.sh` locally before merging — the
-# local gate is the one that refuses a run with skipped tests.
+# is what a person can actually read. A PR runs nothing on GitHub — build.yml deliberately
+# has no pull_request trigger, because these PRs would fire it on every bump. Prove one with
+# `./ci/run-ci.sh` on a checkout of its branch before merging (the local gate is the one
+# that refuses a run with skipped tests), or dispatch build.yml against the branch.
 version: 2
 updates:
   # The React SPA — the repository's only npm project.

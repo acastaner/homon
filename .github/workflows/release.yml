@@ -13,8 +13,21 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # The whole of build.yml, called rather than copied, so the suite a release is held to
+  # cannot drift from the one `workflow_dispatch` runs. This is the only place a tag is
+  # tested: nothing below runs unless every suite passed, so a red suite publishes nothing.
+  # It still costs a full run per tag, which is why `./ci/run-ci.sh` comes first locally.
+  test:
+    name: Test
+    uses: ./.github/workflows/build.yml
+    with:
+      suites: all
+    permissions:
+      contents: read    # checkout; build.yml asks for no more
+
   build-push-images:
     name: Build and push the ${{ matrix.name }} image
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read    # checkout

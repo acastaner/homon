@@ -6,7 +6,8 @@ bundle and proxies `/api/` to `api` on the Compose network; nothing else is publ
 Whatever sits in front (a reverse proxy with trusted-network rules, a WAF, or nothing on a
 LAN) only has to know that one port.
 
-Images come from GHCR, built by `.github/workflows/release.yml` on a `vX.Y.Z` tag:
+Images come from GHCR, built by `.github/workflows/release.yml` on a `vX.Y.Z` tag once the
+full `build.yml` suite has passed against that tag — a red suite publishes nothing:
 `ghcr.io/acastaner/homon-api` and `homon-web`, tagged with the bare version. The repository
 is public, so no registry credential is needed to pull.
 

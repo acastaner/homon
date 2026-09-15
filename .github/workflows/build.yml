@@ -1,23 +1,29 @@
 name: build
 
 on:
-  # Two triggers, and the split is deliberate.
+  # Remote runs happen on exactly two occasions, and never on their own schedule.
   #
   # The gate that the maintainer runs on every change is `./ci/run-ci.sh` locally: it
   # reproduces this file step for step against the same postgres:18-alpine, and it fails if
-  # any test skipped, which this workflow does not check. `workflow_dispatch` runs the same
-  # jobs against any branch or tag when somebody wants a specific commit proved green from
-  # somewhere that is not the maintainer's machine.
+  # any test skipped, which this workflow does not check.
   #
-  # `pull_request` is here because this repository is public: an outside contributor has no
-  # `ci/run-ci.sh` on the maintainer's machine, and a pull request with no check at all is
-  # a review that starts by asking "did you run the tests". Dependabot's pull requests cost
-  # the same minutes; that is the trade.
+  # `workflow_call` is release.yml: a `v*.*.*` tag runs these jobs first, and no image is
+  # pushed unless they pass. `workflow_dispatch` runs them against any branch or tag when
+  # somebody wants a specific commit proved green from somewhere that is not the
+  # maintainer's machine — a Dependabot branch before merging it, say.
   #
-  # KNOW THE COST BEFORE PUSHING A TAG. release.yml triggers on `v*.*.*` independently of
-  # this file and runs no tests, so a tag publishes two images to GHCR with nothing between
-  # a red suite and a release. Run `./ci/run-ci.sh` before pushing one.
-  pull_request:
+  # There is deliberately NO `pull_request` trigger. It was here once, for outside
+  # contributors, and Dependabot's steady stream of pull requests turned it into a run on
+  # every dependency bump. A pull request is proved by `./ci/run-ci.sh` on a checkout of
+  # its branch, or by dispatching this workflow against it. Do not add `push` either: the
+  # maintainer has already run the gate on anything they push.
+  workflow_call:
+    inputs:
+      suites:
+        description: Which suites to run
+        required: false
+        default: all
+        type: string
   workflow_dispatch:
     inputs:
       suites:
@@ -37,15 +43,17 @@ on:
 permissions:
   contents: read
 
+# Never cancel: both callers are a person asking for a verdict on a specific commit, and a
+# release half-tested is worse than two runs queued.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   web:
     name: Front end — build, lint, test
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'web' }}
+    if: ${{ inputs.suites == 'all' || inputs.suites == 'web' }}
     defaults:
       run:
         working-directory: src/Homon.Web
@@ -76,7 +84,7 @@ jobs:
   api:
     name: Backend — build and the full suite against PostgreSQL
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'api' }}
+    if: ${{ inputs.suites == 'all' || inputs.suites == 'api' }}
 
     # The whole point of this job. Without a database, DatabaseFactAttribute skips the
     # database-backed tests and a green run proves very little. postgres:18-alpine matches
@@ -98,8 +106,7 @@ jobs:
 
     env:
       # Not a secret: this database exists for the length of one job, on a runner nothing
-      # else can reach. A real credential here would be worse than useless — repository
-      # secrets are not available to workflows triggered by a pull request from a fork.
+      # else can reach. A repository secret would add a thing to rotate and protect nothing.
       HOMON_TEST_CONNECTION: >-
         Host=localhost;Port=5432;Database=homon;Username=homon;Password=homon
 
@@ -141,7 +148,7 @@ jobs:
   e2e:
     name: End to end — Playwright against the real stack
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || inputs.suites == 'all' || inputs.suites == 'e2e' }}
+    if: ${{ inputs.suites == 'all' || inputs.suites == 'e2e' }}
 
     # Same image, database, role and password as the `api` job above, for the same reason.
     services:
