@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+  <style>
+    /* Direction: Status board — phone, fresh installation. Every section shows only its empty state. Charcoal dark is the resident scheme. */
+    body { margin: 0; }
+    .root {
+      --bg: #1e1d1b; --surface: #262421; --line: #3a3733; --line-strong: #4d4943; --text: #ece8e0; --muted: #a39d92; --link: #ece8e0;
+      font-family: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+    }
+    .root.light {
+      --bg: #f6f4ef; --surface: #fffdf9; --line: #e2ddd3; --line-strong: #c9c2b4; --text: #1c1a17; --muted: #6b655b; --link: #1c1a17;
+    }
+    .mono { font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace; }
+    a { color: var(--link); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+    a:hover { color: var(--link); text-decoration-color: var(--text); }
+    .nav a { text-decoration: none; color: var(--muted); font-weight: 500; padding: 0 2px; font-size: 15px; height: 52px; display: flex; align-items: center; border-bottom: 2px solid transparent; }
+    .nav a.active { color: var(--text); border-bottom-color: var(--text); }
+    h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+    .panel { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 16px 14px; display: flex; flex-direction: column; gap: 4px; }
+    .panel b { font-size: 15px; font-weight: 600; }
+    .panel p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+  </style>
+</helmet>
+<div class="root {{themeClass}}" style="width: 412px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; height: 52px; border-bottom: 1px solid var(--line-strong); background: var(--surface);">
+    <a href="#" style="font-weight: 700; font-size: 17px; text-decoration: none;">Homon</a>
+    <nav class="nav" aria-label="Site" style="display: flex; gap: 20px; height: 52px; align-items: center;">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Admin</a>
+    </nav>
+  </header>
+
+  <main style="padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 26px; flex-grow: 1;">
+
+    <div style="display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line-strong); padding-bottom: 14px;">
+      <h1 style="font-size: 22px; font-weight: 600; margin: 0;">Dashboard</h1>
+      <span class="mono" style="font-size: 12px; color: var(--muted);">nothing is being watched yet</span>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Services</h2>
+      <div class="panel"><b>No probes yet</b><p>An administrator adds them under <a href="#">Admin → Probes</a>. Each one becomes a row here.</p></div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Backups</h2>
+      <div class="panel"><b>No backup reports yet</b><p>A backup script reports its runs with an API key from <a href="#">Admin → API keys</a>.</p></div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Links</h2>
+      <div class="panel"><b>No links yet</b><p>Bookmarks the household uses, added under <a href="#">Admin → Links</a>.</p></div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Weather</h2>
+      <div class="panel"><b>No location set</b><p>The administrator sets one in the installation's configuration; current conditions and the forecast appear here.</p></div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>This week</h2>
+      <div class="panel"><b>No calendars yet</b><p>The administrator adds calendar feeds in the installation's configuration; the coming days appear here.</p></div>
+    </section>
+  </main>
+
+  <footer class="mono" style="padding: 14px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px;">Homon 0.1.0 · API 0.1.0</footer>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"},"$preview":{"width":412,"height":990}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: (this.props.dark ?? true) ? 'dark' : 'light' };
+  }
+}
+</script>
+</body>
+</html>

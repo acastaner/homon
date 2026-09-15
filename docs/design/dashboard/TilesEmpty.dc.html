@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&amp;display=swap">
+  <style>
+    /* Direction: Tinted tiles — phone, fresh installation. Every section shows only its empty state. */
+    body { margin: 0; }
+    .root {
+      --bg: #1e3272; --surface: #2f4c9a; --raised: #3b5aaa; --line: rgba(255,255,255,0.12);
+      --text: #f4f6ff; --muted: #b9c6ee; --link: #ffffff;
+      font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+    }
+    .root.light {
+      --bg: #e9eef9; --surface: #ffffff; --raised: #f3f6fd; --line: rgba(23,35,82,0.10);
+      --text: #172352; --muted: #5b6a9c; --link: #1f3a8a;
+    }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { color: var(--link); text-decoration: underline; }
+    .nav a { color: var(--muted); font-weight: 600; padding: 10px 12px; border-radius: 10px; font-size: 15px; }
+    .nav a.active { color: var(--text); background: var(--surface); }
+    h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 0; }
+    .empty { border: 1.5px dashed var(--line); border-radius: 14px; padding: 22px 18px; display: flex; flex-direction: column; gap: 6px; }
+    .empty p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .empty b { font-size: 15.5px; font-weight: 700; color: var(--text); }
+    .empty a { font-weight: 700; text-decoration: underline; }
+  </style>
+</helmet>
+<div class="root {{themeClass}}" style="width: 412px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 12px 20px; border-bottom: 1px solid var(--line);">
+    <a href="#" style="font-weight: 800; font-size: 20px; letter-spacing: -0.01em;">Homon</a>
+    <nav class="nav" aria-label="Site" style="display: flex; gap: 2px;">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Admin</a>
+    </nav>
+  </header>
+
+  <main style="padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 28px; flex-grow: 1;">
+
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <h1 style="font-size: 28px; font-weight: 800; margin: 0; letter-spacing: -0.02em;">Dashboard</h1>
+      <p style="margin: 0; color: var(--muted); font-size: 14px;">Nothing is being watched yet</p>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2>Services</h2>
+      <div class="empty">
+        <b>No probes yet</b>
+        <p>An administrator adds them under <a href="#">Admin → Probes</a>. Each one becomes a card here.</p>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2>Links</h2>
+      <div class="empty">
+        <b>No links yet</b>
+        <p>Bookmarks the household uses, added under <a href="#">Admin → Links</a>.</p>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2>Weather</h2>
+      <div class="empty">
+        <b>No location set</b>
+        <p>The administrator sets one in the installation's configuration; current conditions and the forecast appear here.</p>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2>This week</h2>
+      <div class="empty">
+        <b>No calendars yet</b>
+        <p>The administrator adds calendar feeds in the installation's configuration; the coming days appear here.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer style="padding: 16px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px;">Homon 0.1.0 · API 0.1.0</footer>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"},"$preview":{"width":412,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: (this.props.dark ?? true) ? 'dark' : 'light' };
+  }
+}
+</script>
+</body>
+</html>

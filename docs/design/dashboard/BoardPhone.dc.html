@@ -1,0 +1,215 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+  <style>
+    /* Direction: Status board — phone (412px). Charcoal dark is the resident scheme (chosen 2026-09-15); the `dark` tweak flips to warm paper. */
+    body { margin: 0; }
+    .root {
+      --bg: #1e1d1b; --surface: #262421; --line: #3a3733; --line-strong: #4d4943; --text: #ece8e0; --muted: #a39d92; --link: #ece8e0;
+      --up: #3fb950; --unstable: #f0883e; --down: #fe5950; --unknown: #928c7e;
+      --up-bg: #1f3325; --unstable-bg: #3d2a1c; --down-bg: #3f2222;
+      --src-a: #3d8ae0; --src-b: #b57f1e; --src-c: #a877e3;
+      font-family: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+    }
+    .root.light {
+      --bg: #f6f4ef; --surface: #fffdf9; --line: #e2ddd3; --line-strong: #c9c2b4; --text: #1c1a17; --muted: #6b655b; --link: #1c1a17;
+      --up: #1a7f37; --unstable: #be3d04; --down: #b91c1c; --unknown: #746d63;
+      --up-bg: #e3f3e6; --unstable-bg: #fdeadb; --down-bg: #fbe1e1;
+      --src-a: #3a67d0; --src-b: #946500; --src-c: #8d55c4;
+    }
+    .mono { font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    a { color: var(--link); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+    a:hover { color: var(--link); text-decoration-color: var(--text); }
+    .nav a { text-decoration: none; color: var(--muted); font-weight: 500; padding: 0 2px; font-size: 15px; height: 52px; display: flex; align-items: center; border-bottom: 2px solid transparent; }
+    .nav a.active { color: var(--text); border-bottom-color: var(--text); }
+    h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+    .row { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; padding: 12px 14px; border-top: 1px solid var(--line); min-height: 60px; box-sizing: border-box; align-items: center; }
+    .row:first-child { border-top: none; }
+    .row.down { background: var(--down-bg); }
+    .row.unstable { background: var(--unstable-bg); }
+    .row.paused { color: var(--muted); background: repeating-linear-gradient(135deg, transparent 0 10px, var(--bg) 10px 12px); }
+    .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; justify-self: end; }
+    .chip svg { width: 16px; height: 16px; flex: none; }
+    .chip.up { color: var(--up); } .chip.unstable { color: var(--unstable); } .chip.down { color: var(--down); } .chip.paused { color: var(--muted); }
+    .name { font-weight: 600; font-size: 15.5px; }
+    .detail { color: var(--muted); font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+    .uptime { font-size: 13px; justify-self: end; color: var(--muted); }
+    .spark { width: 60px; height: 18px; display: block; }
+    .stat { display: flex; align-items: baseline; gap: 4px; }
+    .stat b { font-size: 18px; font-weight: 600; }
+    .stat span { font-size: 12.5px; color: var(--muted); }
+    .link-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .cal-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .cal-day { font-size: 13px; color: var(--muted); }
+    .cal-ev { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+    .wx-day { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .wx-day svg { width: 20px; height: 20px; color: var(--muted); }
+    .wx-day span { color: var(--muted); width: 40px; }
+    .wx-day b { font-weight: 500; margin-left: auto; }
+  </style>
+</helmet>
+<div class="root {{themeClass}}" style="width: 412px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; height: 52px; border-bottom: 1px solid var(--line-strong); background: var(--surface);">
+    <a href="#" style="font-weight: 700; font-size: 17px; text-decoration: none;">Homon</a>
+    <nav class="nav" aria-label="Site" style="display: flex; gap: 20px; height: 52px; align-items: center;">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Admin</a>
+    </nav>
+  </header>
+
+  <main style="padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 26px; flex-grow: 1;">
+
+    <div style="display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line-strong); padding-bottom: 14px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h1 style="font-size: 22px; font-weight: 600; margin: 0;">Dashboard</h1>
+        <span class="mono" style="font-size: 12px; color: var(--muted);">refreshed 42 s ago</span>
+      </div>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="stat"><b class="mono">5</b><span>up</span></div>
+        <div class="stat"><b class="mono" style="color: var(--unstable);">1</b><span>unstable</span></div>
+        <div class="stat"><b class="mono" style="color: var(--down);">1</b><span>down</span></div>
+        <div class="stat"><b class="mono">1</b><span>paused</span></div>
+        <div class="stat" style="margin-left: auto;"><b class="mono">99.44%</b><span>30 d</span></div>
+      </div>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Services</h2>
+      <div class="panel">
+        <div class="row down">
+          <span class="name">Storage</span>
+          <span class="chip down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Down</span>
+          <span class="detail" style="color: var(--down); font-weight: 500;">Share unreachable · 2 min ago</span>
+          <span class="uptime mono">98.32%</span>
+        </div>
+        <div class="row unstable">
+          <span class="name">Wi-Fi</span>
+          <span class="chip unstable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>Unstable</span>
+          <span class="detail" style="color: var(--unstable); font-weight: 500;">3 of 5 checks failed<svg class="spark" viewBox="0 0 88 22"><path d="M0 12 L3 11 6 13 9 11 12 12 15 4 18 11 21 10 24 12 27 3 30 12 33 11 36 5 39 12 42 11 45 12 48 10 51 12 54 4 57 11 60 12 63 3 66 11 69 12 72 5 75 11 78 3 81 12 84 4 88 11" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="88" cy="11" r="2.5" fill="var(--unstable)"/></svg></span>
+          <span class="uptime mono">97.41%</span>
+        </div>
+        <div class="row">
+          <span class="name">Internet</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Up</span>
+          <span class="detail">11 ms · 1 min ago<svg class="spark" viewBox="0 0 88 22"><path d="M0 13 L3 12 6 14 9 11 12 12 15 10 18 11 21 9 24 12 27 11 30 13 33 10 36 11 39 8 42 11 45 10 48 12 51 11 54 9 57 11 60 10 63 13 66 11 69 9 72 11 75 10 78 12 81 11 84 10 88 11" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="88" cy="11" r="2.5" fill="var(--up)"/></svg></span>
+          <span class="uptime mono">99.97%</span>
+        </div>
+        <div class="row">
+          <span class="name">Media</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Up</span>
+          <span class="detail">HTTP 200 · 2 min ago</span>
+          <span class="uptime mono">99.90%</span>
+        </div>
+        <div class="row">
+          <span class="name">Photos</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Up</span>
+          <span class="detail">HTTP 200 · 3 min ago</span>
+          <span class="uptime mono">99.85%</span>
+        </div>
+        <div class="row">
+          <span class="name">Home automation</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Up</span>
+          <span class="detail">HTTP 200 · 1 min ago</span>
+          <span class="uptime mono">99.99%</span>
+        </div>
+        <div class="row">
+          <span class="name">Git</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Up</span>
+          <span class="detail">HTTP 200 · 2 min ago</span>
+          <span class="uptime mono">99.62%</span>
+        </div>
+        <div class="row paused">
+          <span class="name">Printer</span>
+          <span class="chip paused"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14M16 5v14"/></svg>Paused</span>
+          <span class="detail">Paused by the administrator</span>
+          <span class="uptime mono">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Backups</h2>
+      <div class="panel">
+        <div class="row">
+          <span class="name">Nightly documents</span>
+          <span class="chip up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Succeeded</span>
+          <span class="detail">today 02:14</span>
+          <span class="uptime mono">every night</span>
+        </div>
+        <div class="row unstable">
+          <span class="name">Photo library</span>
+          <span class="chip unstable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>Late</span>
+          <span class="detail" style="color: var(--unstable); font-weight: 500;">3 days ago · expected Sunday</span>
+          <span class="uptime mono">weekly</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Links</h2>
+      <div class="panel" style="padding: 2px 14px;">
+        <div class="link-row" style="border-top: none;"><a href="#" class="name">Media library</a><span class="detail">Films and series</span></div>
+        <div class="link-row"><a href="#" class="name">Photo albums</a><span class="detail">The family library</span></div>
+        <div class="link-row"><a href="#" class="name">Router</a><span class="detail">Wi-Fi settings and guests</span></div>
+        <div class="link-row"><a href="#" class="name">Recipes</a><span class="detail">The household cookbook</span></div>
+        <div class="link-row"><a href="#" class="name">Printer queue</a><span class="detail">What is printing</span></div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2>Weather · Home</h2>
+      <div class="panel" style="padding: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px; padding-bottom: 10px;">
+          <svg style="width: 36px; height: 36px; color: var(--muted); flex: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .5-8A5.5 5.5 0 0 1 18 8.5 3.5 3.5 0 0 1 17.5 15z"/><path d="M9 18l-1 3M13 18l-1 3M17 18l-1 3"/></svg>
+          <div style="display: flex; flex-direction: column;">
+            <div class="mono" style="font-size: 28px; font-weight: 500; line-height: 1.1;">17°</div>
+            <div class="detail">Light rain · wind 14 km/h</div>
+          </div>
+        </div>
+        <div class="wx-day"><span>Tue</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1 .5-8A5.5 5.5 0 0 1 18 11.5 3.5 3.5 0 0 1 17.5 18z"/></svg>Cloudy<b class="mono">19° / 11°</b></div>
+        <div class="wx-day"><span>Wed</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Sunny<b class="mono">21° / 12°</b></div>
+        <div class="wx-day"><span>Thu</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .5-8A5.5 5.5 0 0 1 18 8.5 3.5 3.5 0 0 1 17.5 15z"/><path d="M9 18l-1 3M13 18l-1 3M17 18l-1 3"/></svg>Rain<b class="mono">16° / 9°</b></div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h2>This week</h2>
+        <div style="display: flex; gap: 12px; font-size: 12px; color: var(--muted);">
+          <span style="display: flex; align-items: center; gap: 5px;"><span class="swatch" style="background: var(--src-a);"></span>Family</span>
+          <span style="display: flex; align-items: center; gap: 5px;"><span class="swatch" style="background: var(--src-b);"></span>Work</span>
+          <span style="display: flex; align-items: center; gap: 5px;"><span class="swatch" style="background: var(--src-c);"></span>Town</span>
+        </div>
+      </div>
+      <div class="panel" style="padding: 2px 14px;">
+        <div class="cal-row" style="border-top: none;"><span class="cal-day mono">Mon 15</span><div style="display: flex; flex-direction: column; gap: 6px;"><div class="cal-ev"><span class="swatch" style="background: var(--src-a);"></span>Piano lesson <span class="mono detail">17:00</span></div></div></div>
+        <div class="cal-row"><span class="cal-day mono">Tue 16</span><div style="display: flex; flex-direction: column; gap: 6px;"><div class="cal-ev"><span class="swatch" style="background: var(--src-b);"></span>Dentist <span class="mono detail">09:30</span></div><div class="cal-ev"><span class="swatch" style="background: var(--src-c);"></span>Bin collection</div></div></div>
+        <div class="cal-row"><span class="cal-day mono">Wed 17</span><div style="display: flex; flex-direction: column; gap: 6px;"><div class="cal-ev"><span class="swatch" style="background: var(--src-a);"></span>School trip <span class="mono detail">all day</span></div></div></div>
+        <div class="cal-row"><span class="cal-day mono">Thu 18</span><div style="display: flex; flex-direction: column; gap: 6px;"><div class="cal-ev"><span class="swatch" style="background: var(--src-b);"></span>Dinner out <span class="mono detail">19:00</span></div></div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mono" style="padding: 14px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px;">Homon 0.1.0 · API 0.1.0</footer>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"},"$preview":{"width":412,"height":1840}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: (this.props.dark ?? true) ? 'dark' : 'light' };
+  }
+}
+</script>
+</body>
+</html>

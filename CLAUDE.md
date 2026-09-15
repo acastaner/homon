@@ -21,10 +21,12 @@ switched by `Auth:RequireSignInForReaders`, an `IAlertEmailSender` seam (Resend 
 log), `/health`, `/api/v1/meta`, `/api/v1/auth/*`, OpenAPI at `/api/v1/openapi.json`, an
 unstyled React shell with a working sign-in form, and the three-suite gate.
 
-**There is deliberately no style.** No theme tokens, no fonts, no `className` on any
-element. The design pass owns that — `docs/design-brief.md` — and until it lands, do not
-add classes to make something "look right". Semantic HTML, landmarks and accessible names
-are the contract with the tests; keep them.
+**There is deliberately no style yet.** No theme tokens, no fonts, no `className` on any
+element. The design pass (plan 012) owns that, and its target is now fixed: the **Status
+board** direction, dark by default, specified under "Design guidelines" in
+`docs/design-brief.md` and pictured in `docs/design/`. Until plan 012 lands, do not add
+classes to make something "look right". Semantic HTML, landmarks and accessible names are
+the contract with the tests; keep them.
 
 ## The gate
 

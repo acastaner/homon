@@ -17,7 +17,7 @@ decisions themselves live in `docs/ARCHITECTURE.md`.
 | 009 | planned | Alerts by email |
 | 010 | planned | Weather widget |
 | 011 | planned | Family calendar widget |
-| 012 | planned | Design pass (from `docs/design-brief.md`) |
+| 012 | planned | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`) |
 
 `docs/MODULES.md` carries each planned module's requirements and the constraints already
 known. The gate at plan 001: `./ci/run-ci.sh` → `PASS — web api e2e`.

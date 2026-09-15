@@ -150,6 +150,29 @@ problems. Mutating endpoints require `application/json` — a cross-site form ca
 it — which is the CSRF posture, and why there is no antiforgery token. nginx adds a
 report-only CSP on the SPA.
 
+### 3.12 The look is a status board, dark by default
+
+Chosen on 15 September 2026 from four directions drawn at phone and desktop width
+(tinted tiles, status board, warm home, dark console; all kept in `docs/design/`). The
+status board won because it reads like a table where a table is the truth — one row per
+probe, uptime and last check in aligned columns — and still answers the family's
+question at a glance: anything wrong tints its whole row and carries a glyph and a word.
+The tinted tiles, closest to the reference screenshots, were rejected because orange and
+red fight a saturated ground; the warm home because its sentence headline has to stay
+honest from zero probes to forty; the dark console because its light variant has no
+character.
+
+Dark is served by default to every visitor, not only to those whose system asks for it.
+That overrides the brief's original "respect `prefers-color-scheme`": a home dashboard is
+often left open on a shared screen, and the maintainer wants one predictable look. The
+warm-paper light scheme is a first-class alternative behind an explicit choice, stored
+per browser. Following the system instead is a one-line change in the theme bootstrap,
+and is the obvious thing to revisit if readers ask.
+
+The written specification — tokens in both schemes, type ramp, component rules — is the
+"Design guidelines" section of `docs/design-brief.md`. The artboards illustrate it; where
+they disagree, the guidelines win.
+
 ## 4. Things this record does not yet decide
 
 The probe scheduler's shape (one `BackgroundService` with a per-probe timer, or a channel

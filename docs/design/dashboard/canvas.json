@@ -1,0 +1,150 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Status board"
+    },
+    {
+      "id": "page-2",
+      "name": "Other directions"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "BoardPhone.dc.html",
+      "title": "Dashboard · phone",
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 1840,
+      "page": "page-1"
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Dashboard · desktop",
+      "x": 500,
+      "y": 0,
+      "w": 1440,
+      "h": 1230,
+      "page": "page-1"
+    },
+    {
+      "file": "BoardEmpty.dc.html",
+      "title": "Dashboard · fresh install",
+      "x": 2020,
+      "y": 0,
+      "w": 412,
+      "h": 990,
+      "page": "page-1"
+    },
+    {
+      "file": "TilesPhone.dc.html",
+      "title": "Tinted tiles · phone",
+      "x": 0,
+      "y": 0,
+      "w": 412,
+      "h": 2280,
+      "page": "page-2"
+    },
+    {
+      "file": "TilesDesktop.dc.html",
+      "title": "Tinted tiles · desktop",
+      "x": 500,
+      "y": 0,
+      "w": 1440,
+      "h": 1360,
+      "page": "page-2"
+    },
+    {
+      "file": "TilesEmpty.dc.html",
+      "title": "Tinted tiles · fresh install",
+      "x": 2020,
+      "y": 0,
+      "w": 412,
+      "h": 960,
+      "page": "page-2"
+    },
+    {
+      "file": "HomePhone.dc.html",
+      "title": "Warm home · phone",
+      "x": 0,
+      "y": 2560,
+      "w": 412,
+      "h": 2150,
+      "page": "page-2"
+    },
+    {
+      "file": "HomeDesktop.dc.html",
+      "title": "Warm home · desktop",
+      "x": 500,
+      "y": 2560,
+      "w": 1440,
+      "h": 1400,
+      "page": "page-2"
+    },
+    {
+      "file": "ConsolePhone.dc.html",
+      "title": "Dark console · phone",
+      "x": 0,
+      "y": 5000,
+      "w": 412,
+      "h": 2250,
+      "page": "page-2"
+    },
+    {
+      "file": "ConsoleDesktop.dc.html",
+      "title": "Dark console · desktop",
+      "x": 500,
+      "y": 5000,
+      "w": 1440,
+      "h": 1160,
+      "page": "page-2"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "decision",
+      "x": 0,
+      "y": -520,
+      "w": 560,
+      "page": "page-1",
+      "text": "FINAL FOR IMPLEMENTATION — Status board, dark by default (15 Sep 2026).\n\nThis page is the reference for plan 012. The tokens, type ramp and component rules are written out in docs/design-brief.md → Design guidelines; the artboards here are the picture of them.\n\nCharcoal ground, warm off-white type, hairline panels, a real table on desktop that folds into stacked rows on the phone. Status is always a glyph + word chip; anything wrong tints its row. Numbers are monospace so columns align.\n\nDark is served to everyone by default; the warm-paper light scheme (the Dark switch) is the explicit alternative.\n\nCalendar sources use blue, amber and violet — chosen so they stay distinct for colour-blind readers.\n\nType: IBM Plex Sans (@fontsource-variable/ibm-plex-sans) + IBM Plex Mono (@fontsource/ibm-plex-mono)."
+    },
+    {
+      "id": "read-me-first",
+      "x": 0,
+      "y": -640,
+      "w": 560,
+      "page": "page-2",
+      "text": "The three directions not chosen, kept for reference.\n\nEvery frame shows the same household as the Status board page: 8 probes (1 down, 1 unstable, 1 paused), 2 backups (1 late), 5 links, weather, and a 4-day calendar with 3 sources. Names are placeholders. Each artboard has a Dark switch."
+    },
+    {
+      "id": "tiles-note",
+      "x": 2020,
+      "y": 1040,
+      "w": 412,
+      "page": "page-2",
+      "text": "A · Tinted tiles\n\nClosest to the reference screenshots: a deep blue-slate ground, lighter tinted tiles, icon + name + detail, a haloed dot with the status word on the right and the uptime under it.\n\nTradeoff: colour on colour — orange and red fight the blue ground.\n\nType: Manrope."
+    },
+    {
+      "id": "home-note",
+      "x": 2020,
+      "y": 2560,
+      "w": 412,
+      "page": "page-2",
+      "text": "C · Warm home\n\nThe family-first read: a sentence headline, big rounded cards with a 48px status glyph, weather and calendar as first-class panels. Cream ground, terracotta accent.\n\nTradeoff: generated headline copy must stay honest for forty probes and for zero; lowest card density.\n\nType: DM Sans."
+    },
+    {
+      "id": "console-note",
+      "x": 2020,
+      "y": 5000,
+      "w": 412,
+      "page": "page-2",
+      "text": "D · Dark console\n\nColour as signal only: near-black, one desaturated accent, status hues are the only chroma. Square LED + uppercase state word, uptime as the hero numeral.\n\nTradeoff: the most technical tone; the light variant reads as a plain grey utility.\n\nType: Space Grotesk + JetBrains Mono."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}
