@@ -130,12 +130,8 @@ public sealed partial class ProbeScheduler(
 
         var observedAt = timeProvider.GetUtcNow();
 
-        // oldStatus and probe.Status (after RecordObservation) are both in scope here, right
-        // before the save — this is the hook plan 009's IProbeTransitionPublisher attaches to.
-        // Not read by anything yet, hence the discard: a reviewer of 009 should confirm it
-        // did not move this read earlier or later in the method (see plan 002's Maintenance
-        // notes) rather than removing the line outright.
-        _ = probe.Status;
+        // This is where plan 009's IProbeTransitionPublisher will read probe.Status before
+        // and after RecordObservation, right before the save.
         probe.RecordObservation(result.Succeeded, result.LatencyMs, result.Detail, observedAt);
         database.ProbeObservations.Add(new ProbeObservation
         {
