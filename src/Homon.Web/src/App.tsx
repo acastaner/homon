@@ -12,6 +12,9 @@ import { SignInPage } from '@/pages/sign-in-page'
 // each lazy import maps the name onto the `default` React.lazy expects.
 const AdminHomePage = lazy(() => import('@/pages/admin-home-page').then((m) => ({ default: m.AdminHomePage })))
 const AdminProbesPage = lazy(() => import('@/pages/admin-probes-page').then((m) => ({ default: m.AdminProbesPage })))
+const AdminProbeGroupsPage = lazy(() =>
+  import('@/pages/admin-probe-groups-page').then((m) => ({ default: m.AdminProbeGroupsPage })),
+)
 const AdminLinksPage = lazy(() => import('@/pages/admin-links-page').then((m) => ({ default: m.AdminLinksPage })))
 const AdminPagesPage = lazy(() => import('@/pages/admin-pages-page').then((m) => ({ default: m.AdminPagesPage })))
 const AdminApiKeysPage = lazy(() => import('@/pages/admin-api-keys-page').then((m) => ({ default: m.AdminApiKeysPage })))
@@ -40,6 +43,7 @@ export default function App() {
         >
           <Route index element={<AdminHomePage />} />
           <Route path="probes" element={<AdminProbesPage />} />
+          <Route path="probe-groups" element={<AdminProbeGroupsPage />} />
           <Route path="links" element={<AdminLinksPage />} />
           <Route path="pages" element={<AdminPagesPage />} />
           <Route path="api-keys" element={<AdminApiKeysPage />} />

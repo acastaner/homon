@@ -11,6 +11,7 @@ export const READER_ROUTES = [
 export const ADMIN_ROUTES = [
   { path: '/admin', name: 'the admin home' },
   { path: '/admin/probes', name: 'probes' },
+  { path: '/admin/probe-groups', name: 'probe groups' },
   { path: '/admin/links', name: 'links' },
   { path: '/admin/pages', name: 'pages' },
   { path: '/admin/api-keys', name: 'API keys' },

@@ -15,6 +15,9 @@ export function AdminHomePage() {
             <Link to="/admin/probes">Probes</Link>
           </li>
           <li>
+            <Link to="/admin/probe-groups">Probe groups</Link>
+          </li>
+          <li>
             <Link to="/admin/links">Links</Link>
           </li>
           <li>

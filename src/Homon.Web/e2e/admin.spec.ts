@@ -14,7 +14,7 @@ test('an administrator sees the admin home and can reach every section', async (
 
   const sections = page.getByRole('navigation', { name: 'Admin sections' })
 
-  for (const name of ['Probes', 'Links', 'Pages', 'API keys']) {
+  for (const name of ['Probes', 'Probe groups', 'Links', 'Pages', 'API keys']) {
     await sections.getByRole('link', { name }).click()
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
     await page.goBack()
