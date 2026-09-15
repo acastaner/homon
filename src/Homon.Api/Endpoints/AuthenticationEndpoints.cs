@@ -141,9 +141,15 @@ internal static class AuthenticationEndpoints
                 ? SessionKind.Administrator
                 : SessionKind.User;
 
+        ApiKeyScope? scope = kind == SessionKind.ApiKey
+            && Enum.TryParse<ApiKeyScope>(user.FindFirst(HomonClaimTypes.ApiKeyScope)?.Value, out var parsed)
+                ? parsed
+                : null;
+
         return TypedResults.Ok(new SessionResponse(
             Kind: kind,
-            Name: user.FindFirst(ClaimTypes.Name)?.Value ?? string.Empty));
+            Name: user.FindFirst(ClaimTypes.Name)?.Value ?? string.Empty,
+            Scope: scope));
     }
 
     private static async Task<IResult> SignOutAsync(HttpContext httpContext)
@@ -206,5 +212,6 @@ internal static class AuthenticationEndpoints
     /// <summary>What the SPA needs to render the signed-in state.</summary>
     /// <param name="Kind">How the caller authenticated.</param>
     /// <param name="Name">The account's address, or the key's administrator-given name.</param>
-    internal sealed record SessionResponse(SessionKind Kind, string Name);
+    /// <param name="Scope">Set only for an <see cref="SessionKind.ApiKey"/> session.</param>
+    internal sealed record SessionResponse(SessionKind Kind, string Name, ApiKeyScope? Scope);
 }

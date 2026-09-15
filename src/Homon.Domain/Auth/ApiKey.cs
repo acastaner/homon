@@ -25,6 +25,9 @@ public sealed class ApiKey
     /// <summary>Longest name the admin may give a key.</summary>
     public const int NameMaxLength = 100;
 
+    /// <summary>Longest string <see cref="ApiKeyScope"/> is stored as. See ApiKeyConfiguration.</summary>
+    public const int ScopeMaxLength = 20;
+
     public Guid Id { get; set; }
 
     /// <summary>What the key is for, in the admin's words: "clockmaster restic", say.</summary>
@@ -43,4 +46,17 @@ public sealed class ApiKey
 
     /// <summary>Set when the admin revokes the key. A revoked key is refused, never deleted.</summary>
     public DateTimeOffset? RevokedAt { get; set; }
+
+    /// <summary>
+    /// What this key may do. Defaults to the least-privileged value for an instance built
+    /// without setting it explicitly — the database column's own default differs (ReadWrite),
+    /// and exists only to backfill rows that predate this column; see the migration.
+    /// </summary>
+    public ApiKeyScope Scope { get; set; } = ApiKeyScope.Read;
+
+    /// <summary>
+    /// When this key stops authenticating, or null for a key that never expires. Refused
+    /// exactly like a revoked key — the whole request fails, never demoted to anonymous.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
 }

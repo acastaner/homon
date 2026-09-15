@@ -89,11 +89,12 @@ if (args is ["migrate", ..])
 // ---------------------------------------------------------------------------------------
 // Out-of-band command: mint an API key for an automation.
 //
-//   dotnet run --project src/Homon.Api -- create-api-key --name "clockmaster restic"
+//   dotnet run --project src/Homon.Api -- create-api-key --name "clockmaster restic" --scope read-write
 //
 // Prints the key exactly once; only its digest is stored. Until the administrator's key page
 // exists (Backups module), this is the only way to mint one. No authentication, as with every
-// verb here: what gates it is possession of the connection string.
+// verb here: what gates it is possession of the connection string. `--scope` defaults to
+// `read` when omitted; `--expires <YYYY-MM-DD>` defaults to never.
 // ---------------------------------------------------------------------------------------
 if (args is ["create-api-key", ..])
 {
@@ -107,13 +108,17 @@ if (args is ["create-api-key", ..])
 
     using var scope = CommandHost(args).Build().Services.CreateScope();
     var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+    var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
-    var (key, presented) = await new ApiKeyIssuer(database).IssueAsync(keyArguments!.Name);
+    var (key, presented) = await new ApiKeyIssuer(database, timeProvider)
+        .IssueAsync(keyArguments!.Name, keyArguments.Scope, keyArguments.ExpiresAt);
 
     await Console.Error.WriteLineAsync(
         $"""
         name        : {key.Name}
         token id    : {key.TokenId}
+        scope       : {key.Scope}
+        expires     : {(key.ExpiresAt is { } expires ? expires.ToString("u") : "never")}
         key         : shown once, below, and never again. Store it where the script reads it.
         """);
     Console.WriteLine(presented);

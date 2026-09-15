@@ -24,4 +24,11 @@ public static class HomonClaimTypes
 
     /// <summary>The key's administrator-given name, for "reported by" labels.</summary>
     public const string ApiKeyName = "homon:key-name";
+
+    /// <summary>
+    /// The scope of the API key that authenticated this request — the same string
+    /// <see cref="Homon.Domain.Auth.ApiKeyScope"/> persists as ("Read" or "ReadWrite"). Absent
+    /// from a session-cookie principal's claims.
+    /// </summary>
+    public const string ApiKeyScope = "homon:key-scope";
 }

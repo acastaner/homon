@@ -8,7 +8,7 @@ namespace Homon.Api.Authentication;
 /// by the administrator's key page once the Backups module lands, so both produce the same
 /// credential.
 /// </summary>
-internal sealed class ApiKeyIssuer(HomonDbContext database)
+internal sealed class ApiKeyIssuer(HomonDbContext database, TimeProvider timeProvider)
 {
     /// <summary>
     /// Creates the key and returns the row alongside the one-time credential. The credential
@@ -16,6 +16,8 @@ internal sealed class ApiKeyIssuer(HomonDbContext database)
     /// </summary>
     internal async Task<(ApiKey Key, string Presented)> IssueAsync(
         string name,
+        ApiKeyScope scope = ApiKeyScope.Read,
+        DateTimeOffset? expiresAt = null,
         CancellationToken cancellationToken = default)
     {
         var trimmed = name.Trim();
@@ -26,6 +28,14 @@ internal sealed class ApiKeyIssuer(HomonDbContext database)
                 $"A key name is 1 to {ApiKey.NameMaxLength} characters.", nameof(name));
         }
 
+        var now = timeProvider.GetUtcNow();
+
+        if (expiresAt is { } expiry && expiry <= now)
+        {
+            throw new ArgumentException(
+                "A key cannot be minted already expired.", nameof(expiresAt));
+        }
+
         var (tokenId, presented, secretHash) = ApiKeyRules.Mint();
 
         var key = new ApiKey
@@ -34,7 +44,9 @@ internal sealed class ApiKeyIssuer(HomonDbContext database)
             Name = trimmed,
             TokenId = tokenId,
             SecretHash = secretHash,
-            CreatedAt = DateTimeOffset.UtcNow,
+            Scope = scope,
+            ExpiresAt = expiresAt,
+            CreatedAt = now,
         };
 
         database.ApiKeys.Add(key);

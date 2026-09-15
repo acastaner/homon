@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Homon.Api.Authentication;
 
-/// <summary>The three authorisation policies, and what each admits.</summary>
+/// <summary>The four authorisation policies, and what each admits.</summary>
 public static class HomonPolicies
 {
     /// <summary>
@@ -25,6 +25,16 @@ public static class HomonPolicies
     /// </summary>
     public const string ApiKey = "ApiKey";
 
+    /// <summary>
+    /// A session in the Administrator role, or any authenticated API key of either scope. The
+    /// shape plan 002's probe-list read (<c>GET /probes</c>) needs. Scope is not discriminated
+    /// here — narrowing to ReadWrite only is a write concern and no write uses this policy
+    /// (writes stay <see cref="Administrator"/>, session only, per docs/ARCHITECTURE.md §3.3);
+    /// a ReadWrite-only variant is deferred to the Backups module (plan 008), the first thing
+    /// that needs one.
+    /// </summary>
+    public const string AdministratorOrApiKey = "AdministratorOrApiKey";
+
     public static AuthorizationBuilder AddHomonPolicies(this AuthorizationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -34,7 +44,11 @@ public static class HomonPolicies
             .AddPolicy(Administrator, policy => policy.RequireRole(HomonRoles.Administrator))
             .AddPolicy(ApiKey, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireClaim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication));
+                .RequireClaim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication))
+            .AddPolicy(AdministratorOrApiKey, policy => policy.RequireAssertion(context =>
+                context.User.IsInRole(HomonRoles.Administrator)
+                || (context.User.Identity?.IsAuthenticated is true
+                    && context.User.HasClaim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication))));
     }
 }
 

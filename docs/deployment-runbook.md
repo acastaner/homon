@@ -41,11 +41,15 @@ curl -s http://127.0.0.1:8102/api/v1/meta              # release, environment, a
 Mint the administrator's hash on any machine with the SDK:
 `dotnet run --project src/Homon.Api -- hash-password` — only the hash goes in `.env`.
 
-Then, for the backup scripts: `docker compose -f compose.prod.yaml exec api dotnet Homon.Api.dll create-api-key --name "clockmaster restic"`
-prints a key once. Put it where the script reads it (`/home/resticsvc/.restic_env` on the
-maintainer's host, alongside the restic credentials). The report endpoint arrives with the
-Backups module; until then the key can be verified with
-`curl -H "Authorization: Bearer hmn_…" http://127.0.0.1:8102/api/v1/auth/session`.
+Then, for the backup scripts: `docker compose -f compose.prod.yaml exec api dotnet Homon.Api.dll create-api-key --name "clockmaster restic" --scope read-write`
+prints a key once. The `--scope read-write` is deliberate, not the default: the Backups
+module's report endpoint (not yet built) is expected to require `ReadWrite`, and a script
+key minted for reporting duties should carry that scope from the start rather than needing
+re-minting the day that endpoint ships. Put the key where the script reads it
+(`/home/resticsvc/.restic_env` on the maintainer's host, alongside the restic credentials).
+The report endpoint arrives with the Backups module; until then the key can be verified with
+`curl -H "Authorization: Bearer hmn_…" http://127.0.0.1:8102/api/v1/auth/session` — the
+response's `scope` field should read `"readWrite"`.
 
 ## Updating
 

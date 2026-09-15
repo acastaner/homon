@@ -35,6 +35,7 @@ public class AuthenticationEndpointTests(HomonApiFactory factory) : IClassFixtur
 
         Assert.Equal("administrator", session.GetProperty("kind").GetString());
         Assert.Equal(HomonApiFactory.AdministratorEmail, session.GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, session.GetProperty("scope").ValueKind);
     }
 
     [Fact]

@@ -21,7 +21,8 @@ internal sealed class ApiKeyAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    HomonDbContext database)
+    HomonDbContext database,
+    TimeProvider timeProvider)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     /// <summary>
@@ -45,7 +46,7 @@ internal sealed class ApiKeyAuthenticationHandler(
             return AuthenticateResult.NoResult();
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
 
         // The unique index on TokenId is the only thing this looks anything up by; the
         // secret never reaches the database.
@@ -60,6 +61,14 @@ internal sealed class ApiKeyAuthenticationHandler(
         if (key.RevokedAt is not null)
         {
             return AuthenticateResult.Fail("That API key has been revoked.");
+        }
+
+        // Same reasoning as the revoked check above: an expiry date is a property of a key
+        // that exists, and none of it is worth learning to a caller who has not proven they
+        // hold the secret — so this runs before the secret comparison, not after.
+        if (key.ExpiresAt is { } expiresAt && expiresAt <= now)
+        {
+            return AuthenticateResult.Fail("That API key has expired.");
         }
 
         // Last, and in constant time: everything above is a property of a key that exists,
@@ -82,6 +91,7 @@ internal sealed class ApiKeyAuthenticationHandler(
                 new Claim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication),
                 new Claim(HomonClaimTypes.ApiKeyId, key.TokenId),
                 new Claim(HomonClaimTypes.ApiKeyName, key.Name),
+                new Claim(HomonClaimTypes.ApiKeyScope, key.Scope.ToString()),
             ],
             HomonAuthenticationSchemes.ApiKey);
 

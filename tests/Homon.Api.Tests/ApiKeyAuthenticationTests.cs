@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Homon.Api.Authentication;
+using Homon.Domain.Auth;
 using Homon.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -83,11 +84,72 @@ public class ApiKeyAuthenticationTests(ApiDatabaseFactory factory) : IClassFixtu
         Assert.Equal("That API key is not recognised.", problem.GetProperty("detail").GetString());
     }
 
+    [DatabaseFact]
+    public async Task An_expired_key_is_refused_with_a_reason()
+    {
+        var (key, presented) = await IssueAsync("retired by time");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<HomonDbContext>()
+                .ApiKeys.Where(k => k.Id == key.Id)
+                .ExecuteUpdateAsync(k => k.SetProperty(
+                    x => x.ExpiresAt, DateTimeOffset.UtcNow.AddDays(-1)));
+        }
+
+        using var client = TestClient.Create(factory);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", presented);
+
+        var response = await client.GetAsync("/api/v1/auth/session");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("That API key has expired.", problem.GetProperty("detail").GetString());
+    }
+
+    [DatabaseFact]
+    public async Task A_key_with_a_future_expiry_still_authenticates()
+    {
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var (_, presented) = await new ApiKeyIssuer(database, TimeProvider.System).IssueAsync(
+            "not yet retired", ApiKeyScope.Read, DateTimeOffset.UtcNow.AddDays(1));
+
+        using var client = TestClient.Create(factory);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", presented);
+
+        var session = await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/session");
+
+        Assert.Equal("apiKey", session.GetProperty("kind").GetString());
+    }
+
+    [DatabaseTheory]
+    [InlineData(ApiKeyScope.Read, "read")]
+    [InlineData(ApiKeyScope.ReadWrite, "readWrite")]
+    public async Task The_session_reports_the_keys_scope(ApiKeyScope scope, string expected)
+    {
+        using var issuingScope = factory.Services.CreateScope();
+        var database = issuingScope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var (_, presented) = await new ApiKeyIssuer(database, TimeProvider.System)
+            .IssueAsync("scoped key", scope);
+
+        using var client = TestClient.Create(factory);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", presented);
+
+        var session = await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/session");
+
+        Assert.Equal(expected, session.GetProperty("scope").GetString());
+    }
+
     private async Task<(Homon.Domain.Auth.ApiKey Key, string Presented)> IssueAsync(string name)
     {
         using var scope = factory.Services.CreateScope();
         var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
 
-        return await new ApiKeyIssuer(database).IssueAsync(name);
+        return await new ApiKeyIssuer(database, TimeProvider.System).IssueAsync(name);
     }
 }

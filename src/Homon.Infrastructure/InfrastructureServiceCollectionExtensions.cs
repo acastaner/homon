@@ -33,6 +33,11 @@ public static class InfrastructureServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // Registered once, here, so every clock read in the infrastructure and API layers
+        // goes through the same seam. Plans 002/003's scheduler/probe runners should reuse
+        // this registration rather than adding their own.
+        services.AddSingleton(TimeProvider.System);
+
         services.AddHomonDatabase();
         services.AddHomonEmail(configuration, isProduction);
         services.AddAdministrator(configuration);

@@ -75,7 +75,8 @@ whole request (`ApiKeyRefusalMiddleware`) rather than being demoted to anonymous
 readers are anonymous by default, a revoked key would otherwise keep getting 200s from
 every read while its reports silently 401.
 
-Until the Backups module ships its admin page, `create-api-key --name …` is the minter.
+Until the Backups module ships its admin page, `create-api-key --name …` is the minter. A key
+also carries a scope (read or read-write) and an optional expiry as of §3.13.
 
 ### 3.4 One origin, one published port
 
@@ -172,6 +173,25 @@ and is the obvious thing to revisit if readers ask.
 The written specification — tokens in both schemes, type ramp, component rules — is the
 "Design guidelines" section of `docs/design-brief.md`. The artboards illustrate it; where
 they disagree, the guidelines win.
+
+### 3.13 API keys gain a scope and an optional expiry
+
+Superseding part of §3.3, not replacing it: a key still never administers, and it is still
+the mechanism a script authenticates with. A key minted from here on carries `ApiKeyScope`
+(`Read` or `ReadWrite`, persisted as its name) and an optional `ExpiresAt`. Neither is
+enforced by scope-specific policy yet — `HomonPolicies.AdministratorOrApiKey` (the policy
+plan 002's probe-list read uses) admits a key of either scope equally, because nothing this
+session needs to tell them apart. The distinction exists for the Backups module (008), whose
+report endpoint is the first thing that should refuse a Read key.
+
+Expiry is enforced immediately, the same way revocation already is: the authentication
+handler fails the whole request — never demotes it to anonymous — the moment `ExpiresAt` is
+in the past, checked right after the revoked check and before the secret comparison.
+
+`create-api-key` defaults a new key to `Read` (least privilege for an operator who forgot
+the flag) and to no expiry. Every key that existed before this section landed (the runbook's
+"clockmaster restic" key among them) became `ReadWrite` on migration, so a report endpoint
+gated on `ReadWrite` later does not retroactively lock out an already-deployed key.
 
 ## 4. Things this record does not yet decide
 
