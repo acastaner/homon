@@ -6,7 +6,7 @@ index, the order, and the constraints found while scaffolding so nobody rediscov
 
 | Plan | Module | Slot | Summary |
 | --- | --- | --- | --- |
-| 002 | Monitoring — core + ping | `Domain/Monitoring/` | Probe model, scheduler, state machine, uptime, the dashboard's status endpoint, the ICMP runner, 30-day RTT retention |
+| 002 | Monitoring — core, groups + ping | `Domain/Monitoring/` | Probe model, `ProbeGroup`, scheduler, state machine, uptime, the dashboard's status endpoint, the ICMP runner, 30-day RTT retention |
 | 003 | Monitoring — HTTP/HTTPS | `Domain/Monitoring/` | Method, path, expected status / body text (negatable), bearer or basic credentials |
 | 004 | Monitoring — SMB/CIFS | `Domain/Monitoring/` | Share path + credentials, connect-and-list through a managed client |
 | 005 | Monitoring — SNMP (scaffold) | `Domain/Monitoring/` | Community/version + OID; shape only in the first phase |
@@ -72,7 +72,28 @@ Protection. The key ring is the `dataprotection-keys` volume in production; losi
 re-entering every secret, which is why the runbook says how to export it.
 
 **Uptime** is computed over the retained observation window and shown with two decimals;
-define what a probe with no observations shows (`—`, not `100.00%`).
+a probe with no observations shows `—`, not `100.00%`. *(Built: plan 002, Decision 5 —
+`ProbeUptimeCalculator`, a per-probe ratio; the dashboard's aggregate averages probes, not
+observations. See `docs/ARCHITECTURE.md` §3.16.)*
+
+## Added after the brief
+
+Not asked for in the original brief; added because the maintainer wanted them once
+monitoring existed.
+
+- **Probe groups.** Named, admin-created, many-to-many arrangements of probes on the
+  dashboard ("Hosts", "Services", …) — a probe may belong to several, or none. Landed with
+  plan 002 rather than retrofitted later, since groups touch the same migration and the
+  same dashboard restructure `Probe` itself needed. See `docs/ARCHITECTURE.md` §3.14.
+- **`FailureThreshold` default of 2, 1–10 allowed per probe.** The brief names the
+  consecutive-poll rule but not a default; plan 002 picked 2 (the smallest value that still
+  distinguishes "unstable" from "down") as the `POST` default, with the full 1–10 range open
+  to the admin on any probe. A value of 1 makes that probe strictly binary — `Unstable` is
+  never reachable for it.
+- **`GET /probes` admits an API key, not only an Administrator session.** Every probe
+  *write* stays session-only, but a read-only household script (a status board on a second
+  device, a monitoring tool that shells out to the API) can list probes with a key of either
+  scope minted by plan 013. See `docs/ARCHITECTURE.md` §3.3 and §3.13.
 
 **WYSIWYG.** Candidate: TipTap. Whatever is chosen, sanitise on the server (the stored body
 is rendered verbatim) — an allow-list HTML sanitiser in `Homon.Infrastructure/Pages/`.

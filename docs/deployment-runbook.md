@@ -83,3 +83,8 @@ The `api` service sets `net.ipv4.ping_group_range` so .NET's `Ping` can open an 
 ICMP socket under rootless Docker. If the first ping probe reports "permission denied",
 check `docker compose exec api cat /proc/sys/net/ipv4/ping_group_range` — it should read
 `0 2147483647`.
+
+After creating the first probe, `curl http://127.0.0.1:8102/api/v1/status` (or the admin
+UI) should show a non-`Unknown` state within `MonitoringOptions.TickInterval` (5 seconds by
+default) once the sysctl above is confirmed — the scheduler polls a due, unpaused probe on
+its very next tick.

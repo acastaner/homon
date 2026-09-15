@@ -27,7 +27,12 @@ service names, or number of cards. Zero probes is a state; forty is a state.
 
 ### Dashboard (`/`) — the whole product
 
-- **Services**: a grid of **service cards**, one per probe. Each card carries:
+- **Services**: one section per named, non-empty `ProbeGroup` the administrator has
+  created (in the administrator's own order), followed by a final section for probes in no
+  group — labelled "Services" when it is the only section shown, "Other" once at least one
+  named group exists. A probe belonging to two groups appears once in each. With zero
+  groups, this is exactly one "Services" section, unchanged from a flat list. Within each
+  section, a grid of **service cards**, one per probe. Each card carries:
   - the service name;
   - a **status dot** — green *up*, orange *unstable*, red *down*, grey *unknown* (never
     polled), and a *paused* state for a probe the admin switched off;
@@ -57,14 +62,20 @@ links area) — the navigation between dashboard and pages is the design's call.
 Email, password, "Keep me signed in", one button, one error line (the server's sentence,
 verbatim). A note when no administrator is configured on the installation.
 
-### Admin (`/admin`, `/admin/probes`, `/admin/links`, `/admin/pages`, `/admin/api-keys`)
+### Admin (`/admin`, `/admin/probes`, `/admin/probe-groups`, `/admin/links`, `/admin/pages`, `/admin/api-keys`)
 
 Desktop-first is acceptable. Each is a list with add / edit / delete:
 
 - **Probes**: name, type (ping / SMB / HTTP / SNMP), destination, interval, failure
   threshold, and a per-type option set (SMB: share + credentials; HTTP: method, path,
   expected status/text with negation, credentials; SNMP: community/version, OID). A
-  pause toggle. The current status beside each row.
+  pause toggle. The current status beside each row. The probe form also carries a
+  **Groups** fieldset — one checkbox per `ProbeGroup`, so a probe's membership is set from
+  the same form that creates or edits it, with a link to `/admin/probe-groups` when none
+  exist yet.
+- **Probe groups**: name, order (drag or up/down); each group's own member list with its
+  own order and a way to add/remove a probe. Deleting a group keeps its probes — they land
+  in "Other" (or "Services" if it was the last group).
 - **Links**: title, URL, description, order (drag or up/down).
 - **Pages**: slug, title, published toggle, and a **WYSIWYG editor** for the body.
 - **API keys**: name, created, last used, revoke; and a "new key" flow that shows the key
@@ -221,7 +232,9 @@ on phone.
 **Page header.** `h1` left, the stat strip right on desktop and below on phone, a 1px
 `line-strong` rule under both. Stats read `5 up · 1 unstable · 1 down · 1 paused ·
 99.44% uptime, 30 days`: mono value, `muted` label, and the unstable and down values in
-their status colours.
+their status colours. Every probe counts exactly once here regardless of how many
+`ProbeGroup`s it belongs to — the totals and the uptime average are computed over the
+probe list, not once per section.
 
 **Status chip.** Glyph and word, never one without the other, in the status colour:
 
@@ -235,11 +248,15 @@ their status colours.
 
 Backup outcomes reuse the same chips: *Succeeded* (up), *Late* (unstable), *Failed* (down).
 
-**Services.** Desktop is a table in a panel. Columns: Status 132px · Service 1.1fr ·
-Detail 1.6fr · Uptime 96px, right-aligned · 30 days 92px · Checked 120px. The header row is
-a real table header. Rows keep the administrator's order. Phone folds each row into two
-lines — name and chip, then detail and uptime — and sorts by severity: down, unstable,
-unknown, up, paused.
+**Services.** Desktop is a table in a panel, one per dashboard section (each named group,
+then "Other"/"Services") — the table structure and its columns repeat per section, each
+under its own `<h2>`: Status 132px · Service 1.1fr · Detail 1.6fr · Uptime 96px,
+right-aligned · 30 days 92px · Checked 120px. The header row is a real table header. Rows
+keep the administrator's order within their own section (a group's own member order, or
+`Probe.Position` for the ungrouped section). Phone folds each row into two lines — name and
+chip, then detail and uptime — and sorts by severity *within each section independently*:
+down, unstable, unknown, up, paused. A shared probe therefore may sort to a different
+position in each of the sections it appears in.
 
 **Uptime.** Mono, two decimals, `98.32%`; `—` when there is nothing to compute.
 
@@ -271,8 +288,10 @@ page.
 
 ### Not drawn yet
 
-The page view, sign-in, admin lists, probe form and API-key reveal were not drawn. Build
-them from the tokens and components above: panels, table rows, section labels, status
-chips, the link style and the empty state. A form field is a `surface` input with a 1px
-`line` border and 6px radius, label above it in 13px / 500. A primary button is `text` on
-`bg` inverted; a destructive one is `down`.
+The page view, sign-in, admin lists, probe form, probe-group admin page and API-key reveal
+were not drawn. Build them from the tokens and components above: panels, table rows,
+section labels, status chips, the link style and the empty state. A form field is a
+`surface` input with a 1px `line` border and 6px radius, label above it in 13px / 500. A
+primary button is `text` on `bg` inverted; a destructive one is `down`. The probe-group
+admin page is a list-with-add/edit/delete like every other admin list, plus each group's
+own member list — reuse the same row and reorder affordances the probe list already needs.

@@ -193,8 +193,66 @@ the flag) and to no expiry. Every key that existed before this section landed (t
 "clockmaster restic" key among them) became `ReadWrite` on migration, so a report endpoint
 gated on `ReadWrite` later does not retroactively lock out an already-deployed key.
 
+### 3.14 Probe groups are optional, many-to-many and independent of kind
+
+The administrator wants cards arranged into named groups they create themselves — "Hosts"
+for servers and network devices, "Services" for Jellyfin, Immich, Audiobookshelf checks,
+say. Because monitoring did not exist before plan 002, groups ship in the same migration
+as `Probe` itself, and the dashboard is grouped from its first commit rather than
+retrofitted onto a flat list later.
+
+A probe may belong to several groups (a NAS in both "Hosts" and "Storage") — the join is a
+`ProbeGroupMembership` row, not a `GroupId` column on `Probe`, because a single column
+would force a probe into exactly one group, or duplicate the row (and poll it twice) to
+appear in two. A probe in no group appears in the dashboard's final, ungrouped section,
+labelled "Services" when it is the only section shown and "Other" once at least one named
+group exists — a group may also be named "Other"; the name is not reserved. Groups do not
+nest and are not derived from `ProbeKind`: the administrator explicitly wants to mix kinds
+inside one group. Deleting a group removes its memberships and leaves the probes alone;
+deleting a probe removes it from every group it was in. An empty group — one with no
+members at all — is left out of the dashboard's status payload; a group whose members are
+all paused is not empty and still appears.
+
+*Rejected*: free-text tags (no order, no heading identity to key a `<section id>` off).
+
+### 3.15 The probe scheduler is a tick-based scan, not per-probe timers
+
+Resolves this record's own open question, above. `ProbeScheduler` is one
+`BackgroundService` that wakes on a fixed tick (`MonitoringOptions.TickInterval`, 5 s by
+default), scans the database each tick for probes whose `PollInterval` has elapsed, and
+dispatches each due probe's poll under a bounded-concurrency gate
+(`MonitoringOptions.MaxConcurrentPolls`). A probe already mid-poll is never dispatched
+again by an overlapping tick.
+
+*Rejected*: a `System.Threading.Timer`/`PeriodicTimer` per probe. It needs explicit
+lifecycle management on every create, edit, pause and delete — a second source of truth
+for "what probes exist," running beside the database itself. The tick-scan design picks up
+a create, edit, pause or delete for free: the next scan simply sees the new state. It is
+also the more testable shape — one `TimeProvider` governs the whole scheduler, rather than
+N independent timer objects each needing their own fake.
+
+### 3.16 Uptime is a per-probe ratio; the aggregate averages probes, not observations
+
+Also resolves an item from this record's open questions. Uptime, per probe, is
+`successCount / totalCount` over `ProbeObservation` rows within the retained window (30
+days by default), as a percentage rounded to two decimals; `null` (rendered `—`) when the
+probe has no observations at all.
+
+The dashboard's stat strip reports the *mean of each probe's own uptime percentage*, not a
+single ratio pooled across every observation row. A probe polled every 15 seconds would
+otherwise contribute roughly sixty times as many rows as one polled every 15 minutes, and
+silently dominate the number a family reads as "is everything basically fine" — averaging
+per-probe percentages weights every service equally. Probes with no observations are
+excluded from the average, not counted as 0%; a probe belonging to two groups still counts
+once.
+
+*Rejected*: time-weighted uptime (integrating success/failure duration between consecutive
+observations) — a probe's `PollInterval` can change mid-window and pausing leaves gaps
+with no observations at all, and reconciling both into one duration-weighted figure is
+real complexity for a number the brief only asks to be "computed over the retained
+observation window."
+
 ## 4. Things this record does not yet decide
 
-The probe scheduler's shape (one `BackgroundService` with a per-probe timer, or a channel
-of due work), the uptime window's exact definition, the WYSIWYG editor, the weather and
-calendar providers. Each is a module plan's decision and will be recorded here when made.
+The WYSIWYG editor, the weather and calendar providers. Each is a module plan's decision
+and will be recorded here when made.
