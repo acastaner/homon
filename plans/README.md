@@ -12,7 +12,7 @@ reviews and merges the work.
 | Plan | Status | Effort | Depends on | Title |
 | --- | --- | --- | --- | --- |
 | 001 | DONE | — | — | Scaffolding — solution, toolchain, plumbing, gate, Docker, docs |
-| 002 | planned | L | 013 | Monitoring core, probe groups and the ping probe |
+| 002 | DONE (2026-09-16, `2bacef1`) | L | 013 | Monitoring core, probe groups and the ping probe |
 | 003 | planned | M | 002 | HTTP/HTTPS probe |
 | 004 | planned | M | 002, 003 | SMB/CIFS probe (managed client) |
 | 005 | planned | S | 002, 003 | SNMP probe scaffold |
