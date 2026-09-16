@@ -60,11 +60,12 @@ public class PageEndpointTests(ApiDatabaseFactory factory) : IClassFixture<ApiDa
     }
 
     [DatabaseTheory]
-    [InlineData("Upper-Case")]
     [InlineData("has spaces")]
     [InlineData("-leading-hyphen")]
     [InlineData("trailing-hyphen-")]
     [InlineData("double--hyphen")]
+    [InlineData("under_score")]
+    [InlineData("punct@uation")]
     public async Task POST_rejects_a_slug_with_invalid_characters(string invalidSlug)
     {
         using var client = TestClient.Create(factory);
@@ -77,6 +78,21 @@ public class PageEndpointTests(ApiDatabaseFactory factory) : IClassFixture<ApiDa
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(problem.GetProperty("errors").TryGetProperty("slug", out _));
+    }
+
+    [DatabaseFact]
+    public async Task POST_lower_cases_the_slug_before_validating_and_storing_it()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var created = await CreateAsync(client, "Mixed-Case-Slug", "Mixed case slug", "<p>x</p>", isPublished: false);
+
+        Assert.Equal(HttpStatusCode.Created, created.Response.StatusCode);
+        Assert.Equal("mixed-case-slug", created.Body.GetProperty("slug").GetString());
+        Assert.Equal(
+            "/api/v1/pages/mixed-case-slug",
+            created.Response.Headers.Location!.ToString());
     }
 
     [DatabaseFact]
