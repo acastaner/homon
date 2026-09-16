@@ -54,8 +54,10 @@ service names, or number of cards. Zero probes is a state; forty is a state.
 ### Page (`/pages/{slug}`)
 
 An administrator-written explanation page: title and a body of prose with headings, lists,
-links, maybe an image. Readable on a phone. Reached from the dashboard (a Pages list or the
-links area) — the navigation between dashboard and pages is the design's call.
+links, maybe an image. Readable on a phone. Reached from the dashboard's own "Pages" section
+— a `<ul>` of links placed after Links, hidden entirely when there are zero published pages
+(plan 007's resolution of "the navigation between dashboard and pages is the design's
+call"). The section's visual treatment is otherwise undecided — plan 012's call.
 
 ### Sign-in (`/admin/sign-in`)
 

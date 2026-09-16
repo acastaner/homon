@@ -298,7 +298,40 @@ command-line verbs — `ISecretProtector` is registered unconditionally in
 `AddHomonMonitoring`, so every host that resolves the DI container needs the provider
 available, not only the one that serves HTTP traffic.
 
+### 3.18 Pages are sanitised on write, not on read — the stored body is trusted only because of that
+
+`Page.BodyHtml` is rendered with `dangerouslySetInnerHTML` verbatim
+(`page-page.tsx`) to every reader who ever loads the page, so the sanitiser — not the
+TipTap editor that produced the markup — is the module's whole defence against stored XSS.
+`Homon.Infrastructure/Pages/PageHtmlSanitizer.cs` wraps `HtmlSanitizer` (`Ganss.Xss`, MIT)
+with an allow-list that matches the editor's extension list tag for tag: `p`, `h2`–`h4`,
+`strong`, `em`, `s`, `code`, `pre`, `blockquote`, `ul`/`ol`/`li`, `a`, `hr`, `br`, `img`, and
+three attributes (`href`, `src`, `alt`) — no `style`, `class`, `id` or `on*` survive.
+`PostProcessNode` then forces two rules the allow-list cannot express: an absolute link
+(`http`/`https`/`mailto`) gains `target="_blank" rel="noopener noreferrer"`, never
+admin-controlled since the editor has no `target`/`rel` on its own allow-list; and an
+`<img>` is dropped unless its `src` is `https://` — no relative, `http://`, `data:` or
+`blob:` sources, since this plan ships no image upload and a relative path cannot be
+trusted without the app's own origin at sanitise time.
+
+**Sanitise on write, once.** *Rejected*: sanitising on read — repeats the cost on every
+request, and a second render path (an export, an alert email quoting a page) could forget
+to call it; storing raw Markdown and converting to HTML at render time — still needs a
+sanitise step somewhere, and now there are two places (convert, then sanitise) to keep in
+sync instead of one; client-side sanitising alone (DOMPurify) — the stored body is read by
+every future browser that loads the page, not only the one that wrote it, so the server is
+the only place a guarantee can be made.
+
+**A disallowed element's children are dropped with it** (`KeepChildNodes = false`), not
+unwrapped into surrounding text — an `<iframe>` or `<script>` never survives as inert text
+nobody meant to keep. The TipTap extension list and this allow-list move together: adding
+an extension without adding its tag/attribute here means the editor produces markup the
+server silently strips on save; removing an allow-list entry without removing the
+extension is the dangerous direction, since a control's effect then quietly vanishes only
+on save. `PageHtmlSanitizerTests.cs` carries the explicit XSS corpus this pairing is
+checked against.
+
 ## 4. Things this record does not yet decide
 
-The WYSIWYG editor, the weather and calendar providers. Each is a module plan's decision
-and will be recorded here when made.
+The weather and calendar providers. Each is a module plan's decision and will be recorded
+here when made.
