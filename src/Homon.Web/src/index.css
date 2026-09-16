@@ -103,3 +103,21 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * Row tints and the paused hatch (docs/design-brief.md's Status chip component rule):
+ * Tailwind's own gradient utilities don't reach the exact 135°/10px/2px repeating-gradient
+ * spec, so these three are hand-written, reading the same tokens as everything else.
+ */
+.row-tint-unstable {
+  background-color: var(--color-unstable-bg);
+}
+
+.row-tint-down {
+  background-color: var(--color-down-bg);
+}
+
+.row-paused {
+  color: var(--color-muted);
+  background-image: repeating-linear-gradient(135deg, transparent 0 10px, var(--color-bg) 10px 12px);
+}
