@@ -29,9 +29,10 @@ const statusWithASharedProbe = {
       generatedAt: '2026-01-01T00:00:00Z',
     },
   },
-  // Every DashboardPage render also fetches its Links section — declared here so the
-  // existing group-related assertions below don't have to know that.
+  // Every DashboardPage render also fetches its Links and Pages sections — declared here so
+  // the existing group-related assertions below don't have to know that.
   '/api/v1/links': { body: [] },
+  '/api/v1/pages': { body: [] },
 }
 
 const twoLinks = {
@@ -84,7 +85,11 @@ describe('DashboardPage', () => {
   })
 
   it('renders every link opening in a new tab, without leaking a referrer', async () => {
-    stubFetch({ '/api/v1/status': { body: { totals: null, probes: [], groups: [], ungroupedProbeIds: [], generatedAt: '2026-01-01T00:00:00Z' } }, ...twoLinks })
+    stubFetch({
+      '/api/v1/status': { body: { totals: null, probes: [], groups: [], ungroupedProbeIds: [], generatedAt: '2026-01-01T00:00:00Z' } },
+      '/api/v1/pages': { body: [] },
+      ...twoLinks,
+    })
     renderWithProviders(<DashboardPage />)
 
     const nas = await screen.findByRole('link', { name: /NAS \(opens in a new tab\)/ })
@@ -94,5 +99,27 @@ describe('DashboardPage', () => {
       expect(link).toHaveAttribute('target', '_blank')
       expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     }
+  })
+
+  it('shows no Pages section when there are zero published pages', async () => {
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(screen.queryByRole('region', { name: 'Pages' })).not.toBeInTheDocument()
+  })
+
+  it('renders a Pages section linking to each published page', async () => {
+    stubFetch({
+      '/api/v1/status': { body: { totals: null, probes: [], groups: [], ungroupedProbeIds: [], generatedAt: '2026-01-01T00:00:00Z' } },
+      '/api/v1/links': { body: [] },
+      '/api/v1/pages': { body: [{ slug: 'welcome', title: 'Welcome' }] },
+    })
+    renderWithProviders(<DashboardPage />)
+
+    const pages = await screen.findByRole('region', { name: 'Pages' })
+
+    expect(within(pages).getByRole('link', { name: 'Welcome' })).toHaveAttribute('href', '/pages/welcome')
   })
 })

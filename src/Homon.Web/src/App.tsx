@@ -17,6 +17,9 @@ const AdminProbeGroupsPage = lazy(() =>
 )
 const AdminLinksPage = lazy(() => import('@/pages/admin-links-page').then((m) => ({ default: m.AdminLinksPage })))
 const AdminPagesPage = lazy(() => import('@/pages/admin-pages-page').then((m) => ({ default: m.AdminPagesPage })))
+const AdminPageEditorPage = lazy(() =>
+  import('@/pages/admin-page-editor-page').then((m) => ({ default: m.AdminPageEditorPage })),
+)
 const AdminApiKeysPage = lazy(() => import('@/pages/admin-api-keys-page').then((m) => ({ default: m.AdminApiKeysPage })))
 
 /**
@@ -46,6 +49,8 @@ export default function App() {
           <Route path="probe-groups" element={<AdminProbeGroupsPage />} />
           <Route path="links" element={<AdminLinksPage />} />
           <Route path="pages" element={<AdminPagesPage />} />
+          <Route path="pages/new" element={<AdminPageEditorPage />} />
+          <Route path="pages/:id" element={<AdminPageEditorPage />} />
           <Route path="api-keys" element={<AdminApiKeysPage />} />
         </Route>
         {/* An unknown path is the dashboard, not a 404: on a home dashboard there is nothing

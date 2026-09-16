@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
 
 import { useLinks } from '@/lib/links'
+import { usePublishedPages } from '@/lib/pages'
 import { dashboardSections, formatCheckedAt, useStatus } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
@@ -64,6 +65,7 @@ export function DashboardPage() {
   const totals = status.data?.totals
   const now = new Date()
   const { data: links = [] } = useLinks()
+  const { data: pages = [] } = usePublishedPages()
 
   return (
     <>
@@ -134,6 +136,18 @@ export function DashboardPage() {
           </ul>
         )}
       </section>
+      {pages.length > 0 ? (
+        <section aria-labelledby="pages-heading">
+          <h2 id="pages-heading">Pages</h2>
+          <ul>
+            {pages.map((page) => (
+              <li key={page.slug}>
+                <RouterLink to={`/pages/${page.slug}`}>{page.title}</RouterLink>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   )
 }
