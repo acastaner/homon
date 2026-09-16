@@ -1,6 +1,7 @@
 using Homon.Domain.Auth;
 using Homon.Domain.Links;
 using Homon.Domain.Monitoring;
+using Homon.Domain.Pages;
 using Homon.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -10,8 +11,8 @@ namespace Homon.Infrastructure.Persistence;
 
 /// <summary>
 /// The application's single database context: ASP.NET Core Identity's user and role
-/// tables, the API keys, the probes and their groups, the household's links, and — as
-/// each module lands — the pages and backup reports.
+/// tables, the API keys, the probes and their groups, the household's links, the
+/// administrator's pages, and — as each module lands — the backup reports.
 /// </summary>
 /// <remarks>
 /// Derives from <see cref="IdentityDbContext{TUser, TRole, TKey}"/> so the role tables
@@ -30,6 +31,8 @@ public class HomonDbContext(DbContextOptions<HomonDbContext> options)
     public DbSet<ProbeGroup> ProbeGroups => Set<ProbeGroup>();
 
     public DbSet<Link> Links => Set<Link>();
+
+    public DbSet<Page> Pages => Set<Page>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

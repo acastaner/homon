@@ -2,6 +2,7 @@ using System.Net.Security;
 using Homon.Infrastructure.Administration;
 using Homon.Infrastructure.Email;
 using Homon.Infrastructure.Monitoring;
+using Homon.Infrastructure.Pages;
 using Homon.Infrastructure.Persistence;
 using Homon.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
@@ -45,6 +46,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHomonEmail(configuration, isProduction);
         services.AddAdministrator(configuration);
         services.AddHomonMonitoring(configuration);
+        services.AddPages();
 
         return services;
     }
@@ -175,4 +177,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHostedService<ProbeScheduler>();
         services.AddHostedService<ProbeObservationRetentionService>();
     }
+
+    // Singleton: the sanitiser holds only immutable configuration set once in its constructor.
+    private static void AddPages(this IServiceCollection services) =>
+        services.AddSingleton<IPageHtmlSanitizer, PageHtmlSanitizer>();
 }

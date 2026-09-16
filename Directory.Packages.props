@@ -55,6 +55,17 @@
     uses them. docs/MODULES.md names the candidates and the licensing notes.
   -->
 
+  <ItemGroup Label="Pages">
+    <!--
+      The security boundary for the Pages module: BodyHtml is rendered verbatim
+      (dangerouslySetInnerHTML in page-page.tsx), so this allow-list sanitiser — not the TipTap
+      editor client-side — is what makes that safe. MIT, mganss/HtmlSanitizer. Its extension
+      list (client, admin-page-editor-page.tsx) and this sanitiser's allow-list
+      (PageHtmlSanitizer.cs) must change together — see Maintenance notes.
+    -->
+    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing">
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
