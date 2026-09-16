@@ -16,6 +16,7 @@ export const ADMIN_ROUTES = [
   { path: '/admin/pages', name: 'pages' },
   { path: '/admin/pages/new', name: 'the page editor' },
   { path: '/admin/api-keys', name: 'API keys' },
+  { path: '/admin/weather', name: 'weather' },
 ] as const
 
 /**

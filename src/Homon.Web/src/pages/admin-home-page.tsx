@@ -26,6 +26,9 @@ export function AdminHomePage() {
           <li>
             <Link to="/admin/api-keys">API keys</Link>
           </li>
+          <li>
+            <Link to="/admin/weather">Weather</Link>
+          </li>
         </ul>
       </nav>
     </>

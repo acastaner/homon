@@ -331,7 +331,54 @@ extension is the dangerous direction, since a control's effect then quietly vani
 on save. `PageHtmlSanitizerTests.cs` carries the explicit XSS corpus this pairing is
 checked against.
 
+### 3.19 The weather location is a DB singleton row; the SPA never talks to the provider
+
+`WeatherSettings` (`Homon.Domain/Weather/`) holds at most one row, always at the fixed id
+`WeatherSettings.SingletonId` — the admin-page action the module's README asks for ("the
+household sets it once"), not a redeploy. Open-Meteo (https://api.open-meteo.com) needs no
+API key; `OpenMeteoWeatherProvider` asks it directly in the settings' own units
+(`temperature_unit`/`wind_speed_unit`), so nothing downstream converts a value. Coordinates
+leave the server once, on a cache miss, never from a reader's own browser — because nothing
+in the SPA is written to call the provider. `nginx.conf`'s CSP is
+`Content-Security-Policy-Report-Only`, which logs a violation but does not block a request,
+so this is a code property (the SPA carries no client for Open-Meteo, verified by a
+`grep -rn "api.open-meteo.com" src/Homon.Web/src` gate), not a network one.
+
+**`WeatherCache`** is a bespoke singleton wrapper, not raw `IMemoryCache` — neither the
+single-flight semaphore nor the stale-while-error fallback below comes free from that:
+
+- **Fresh for 15 minutes**, matching Open-Meteo's own update cadence; inside that window
+  nothing calls the provider.
+- **Stale-while-error, up to 6 hours**: past fresh but a refresh fails, the last snapshot is
+  served with `stale: true`; older than that (or nothing was ever fetched), `GET /weather`
+  answers `503`.
+- **Single-flight**: concurrent callers past the fresh window share one semaphore; the
+  first through calls the provider, the rest re-check the (by then refreshed) snapshot
+  instead of each calling Open-Meteo.
+- **A monotonic generation counter guards `Invalidate()` against a refresh already in
+  flight.** `PUT`/`DELETE /weather/settings` call `Invalidate()` synchronously, outside the
+  semaphore, so a fetch started under the *old* settings can still be running when a new
+  location is saved. Without a guard, that stale-settings fetch would complete afterwards
+  and silently overwrite the just-cleared snapshot. `Invalidate()` bumps the counter before
+  clearing the snapshot; a fetch only commits its result if the counter is unchanged since
+  it started — a mismatch discards the result rather than caching it, but still returns it
+  to the caller that started that fetch, since it is the true answer for the settings that
+  call was given.
+- One process-wide singleton — fine for Homon's one-`api`-replica deployment (§3.6). A
+  future multi-instance deployment would need a distributed cache; not before then.
+
+**`Weather:Provider=Fake`** (registered alongside the real provider, resolved from
+`IOptions<WeatherOptions>` at first use — the same test-override-safe pattern as
+`IAlertEmailSender`, §3.2) exists solely so the e2e gate, and any other automated run, never
+reaches the live network; it is refused at startup in Production.
+
+*Rejected*: an admin-configurable cache TTL this phase; persisting forecasts to the
+database — nothing needs history, and a table only a cache reads from is upkeep with no
+benefit; the SPA calling Open-Meteo directly — the module README asks for a server-side
+cache, and per-reader calls would multiply the provider's rate limit by family size for
+nothing; geocoding search — pasting coordinates is deferred to a follow-up, which would
+change only how the admin form fills latitude/longitude, not the wire contract.
+
 ## 4. Things this record does not yet decide
 
-The weather and calendar providers. Each is a module plan's decision and will be recorded
-here when made.
+The calendar provider. It is a module plan's decision and will be recorded here when made.

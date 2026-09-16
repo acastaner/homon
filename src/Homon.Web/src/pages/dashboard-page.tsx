@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
 
+import { ApiError } from '@/lib/api'
 import { useLinks } from '@/lib/links'
 import { usePublishedPages } from '@/lib/pages'
 import { dashboardSections, formatCheckedAt, useStatus } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
+import {
+  useWeather,
+  weatherConditionIcon,
+  WEATHER_CONDITION_LABEL,
+  type WeatherUnitsValue,
+} from '@/lib/weather'
 
 /**
  * Below this width each section's rows are sorted by severity instead of the administrator's
@@ -51,6 +58,24 @@ function capitalize(word: string): string {
   return word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)
 }
 
+function unitSymbol(units: WeatherUnitsValue): string {
+  return units === 'imperial' ? '°F' : '°C'
+}
+
+function windUnit(units: WeatherUnitsValue): string {
+  return units === 'imperial' ? 'mph' : 'km/h'
+}
+
+/**
+ * Parses `date` (an ISO calendar date, e.g. "2026-09-16") as local calendar components, not
+ * `new Date(dateString)` — the latter constructs UTC midnight, which renders as the
+ * *previous* day in a negative-offset timezone.
+ */
+function formatForecastDay(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' })
+}
+
 /**
  * The family's page: a stat strip, then one section per non-empty probe group followed by the
  * ungrouped rest — `dashboardSections` decides the split and the labels. Unstyled — no
@@ -66,6 +91,7 @@ export function DashboardPage() {
   const now = new Date()
   const { data: links = [] } = useLinks()
   const { data: pages = [] } = usePublishedPages()
+  const { data: weather, isError: isWeatherError, error: weatherError } = useWeather()
 
   return (
     <>
@@ -148,6 +174,55 @@ export function DashboardPage() {
           </ul>
         </section>
       ) : null}
+      <section aria-labelledby="weather-heading">
+        <h2 id="weather-heading">Weather{weather?.place ? ` · ${weather.place}` : ''}</h2>
+        {weather === null ? (
+          <p>
+            No weather location yet — an administrator sets it under Admin →{' '}
+            <RouterLink to="/admin/weather">Weather</RouterLink>
+          </p>
+        ) : isWeatherError && weatherError instanceof ApiError && weatherError.status === 503 ? (
+          <p>Weather is temporarily unavailable.</p>
+        ) : weather ? (
+          <>
+            {(() => {
+              const CurrentIcon = weatherConditionIcon(weather.current.condition)
+              return (
+                <p>
+                  <CurrentIcon aria-hidden="true" /> {WEATHER_CONDITION_LABEL[weather.current.condition]}{' '}
+                  {Math.round(weather.current.temperature)}
+                  {unitSymbol(weather.units)}
+                </p>
+              )
+            })()}
+            <p>
+              {WEATHER_CONDITION_LABEL[weather.current.condition]} · Wind{' '}
+              {Math.round(weather.current.windSpeed)} {windUnit(weather.units)} · Feels like{' '}
+              {Math.round(weather.current.apparentTemperature)}
+              {unitSymbol(weather.units)}
+            </p>
+            <ul>
+              {weather.forecast.map((day) => {
+                const DayIcon = weatherConditionIcon(day.condition)
+                return (
+                  <li key={day.date}>
+                    {formatForecastDay(day.date)} <DayIcon aria-hidden="true" />{' '}
+                    {WEATHER_CONDITION_LABEL[day.condition]} {Math.round(day.high)}
+                    {unitSymbol(weather.units)}/{Math.round(day.low)}
+                    {unitSymbol(weather.units)}
+                  </li>
+                )
+              })}
+            </ul>
+            <p>
+              Weather data by{' '}
+              <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
+                Open-Meteo.com
+              </a>
+            </p>
+          </>
+        ) : null}
+      </section>
     </>
   )
 }

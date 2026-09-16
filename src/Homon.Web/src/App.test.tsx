@@ -8,8 +8,10 @@ import { stubFetch } from '@/test/fetch'
 const anonymous = {
   '/api/v1/meta': { body: { name: 'Homon', release: '1.0.0', administratorConfigured: true } },
   '/api/v1/auth/session': { status: 204 },
-  // Every DashboardPage render also fetches its Pages section (plan 007's usePublishedPages()).
+  // Every DashboardPage render also fetches its Pages section (plan 007's usePublishedPages())
+  // and its Weather section (plan 010's useWeather()).
   '/api/v1/pages': { body: [] },
+  '/api/v1/weather': { status: 204 },
 }
 
 afterEach(() => {

@@ -156,6 +156,9 @@ export default defineConfig({
         // value here is what puts `LoggingEmailSender` back. The suite then mails nothing at
         // all, which is the only acceptable posture for something that runs unattended.
         Email__ResendApiToken: '',
+        // The gate must never call a live external API — same reasoning as the line above.
+        // Every assertion in weather.spec.ts is against FakeWeatherProvider's fixed forecast.
+        Weather__Provider: 'Fake',
         // Emailed links must land on the SPA, and in this stack the SPA is the preview server.
         FrontEnd__PublicBaseUrl: `http://127.0.0.1:${WEB_PORT}`,
       },
