@@ -5,10 +5,12 @@ using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Pages;
 using Homon.Infrastructure.Persistence;
 using Homon.Infrastructure.Security;
+using Homon.Infrastructure.Weather;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Resend;
@@ -47,6 +49,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddAdministrator(configuration);
         services.AddHomonMonitoring(configuration);
         services.AddPages();
+        services.AddWeather(configuration, isProduction);
 
         return services;
     }
@@ -181,4 +184,49 @@ public static class InfrastructureServiceCollectionExtensions
     // Singleton: the sanitiser holds only immutable configuration set once in its constructor.
     private static void AddPages(this IServiceCollection services) =>
         services.AddSingleton<IPageHtmlSanitizer, PageHtmlSanitizer>();
+
+    private static void AddWeather(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool isProduction)
+    {
+        services.AddOptions<WeatherOptions>()
+            .Bind(configuration.GetSection(WeatherOptions.SectionName))
+            .Validate(
+                options => options.Provider != WeatherProviderKind.Fake || !isProduction,
+                "Weather:Provider=Fake refuses to start in Production.")
+            .ValidateOnStart();
+
+        // Defensive, idempotent no-op: AddHomonInfrastructure already registers this as its
+        // first line, so this only matters if that registration is ever removed.
+        services.TryAddSingleton(TimeProvider.System);
+
+        services.AddHttpClient(OpenMeteoWeatherProvider.HttpClientName, client =>
+            client.BaseAddress = new Uri("https://api.open-meteo.com/"));
+
+        // Singleton, not scoped: WeatherCache below is itself a singleton and calls straight
+        // through to whichever provider IWeatherProvider resolves to, and neither provider
+        // holds a scoped dependency (OpenMeteoWeatherProvider's IHttpClientFactory and
+        // FakeWeatherProvider's TimeProvider are both singletons themselves). Registering
+        // either as scoped would make it a captive dependency the moment WeatherCache asked
+        // for one, and the built-in container's scope validation — on by default in
+        // Development, which is how every test host and the e2e API both run — would refuse
+        // to start rather than silently capture it.
+        services.AddSingleton<OpenMeteoWeatherProvider>();
+        services.AddSingleton<FakeWeatherProvider>();
+
+        // Both providers are registered; which one IWeatherProvider resolves to is decided
+        // from IOptions<WeatherOptions> the first time something asks — never at registration
+        // — for the same test-override reason as AddHomonEmail's IAlertEmailSender above.
+        services.AddSingleton<IWeatherProvider>(serviceProvider =>
+        {
+            var weatherOptions = serviceProvider.GetRequiredService<IOptions<WeatherOptions>>().Value;
+
+            return weatherOptions.Provider == WeatherProviderKind.Fake
+                ? serviceProvider.GetRequiredService<FakeWeatherProvider>()
+                : serviceProvider.GetRequiredService<OpenMeteoWeatherProvider>();
+        });
+
+        services.AddSingleton<WeatherCache>();
+    }
 }
