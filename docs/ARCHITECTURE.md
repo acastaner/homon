@@ -135,12 +135,18 @@ request is proved locally or by a dispatch against its branch.
 Development 5300 (SPA) / 5301 (API); e2e 5310 / 5311; CI PostgreSQL 55433; production
 8102. All chosen not to collide with the sibling's, so both stacks run on one machine.
 
-### 3.10 Phase 0 ships no style
+### 3.10 The design pass styled Phase 0's blank sheet
 
-The SPA renders semantic HTML with landmarks and accessible names and not one `className`.
-Tailwind v4 and the shadcn toolchain are installed and unused. The design pass
-(`docs/design-brief.md`, plan 012) starts from that blank sheet; the unit and Playwright
-tests query by role and name, so they survive it — and must keep surviving it.
+Phase 0 shipped semantic HTML with landmarks and accessible names and not one `className`;
+Tailwind v4 and the shadcn toolchain sat installed and unused. Plan 012 (`docs/design-
+brief.md`) is what ended that: `@theme` tokens and self-hosted fonts, the theme bootstrap
+and toggle, `StatusChip`/`Sparkline` and the panel/row/empty-state primitives, applied to
+every surface a module plan had already built when 012 ran. The unit and Playwright suites
+still query by role and name — that contract survived the pass unchanged, by construction:
+no step was allowed to touch an accessible name, landmark role, or heading text, only add
+`className`. A surface whose owning module has not landed yet (Backups, Calendar, the
+SMB/SNMP probe fieldsets, the API-key reveal flow) stays an unstyled placeholder until that
+module's own plan runs and reuses 012's primitives.
 
 ### 3.11 Security headers, problem details, request ids
 

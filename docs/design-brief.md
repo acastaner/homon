@@ -291,10 +291,16 @@ page.
 
 ### Not drawn yet
 
-The page view, sign-in, admin lists, probe form, probe-group admin page and API-key reveal
-were not drawn. Build them from the tokens and components above: panels, table rows,
-section labels, status chips, the link style and the empty state. A form field is a
-`surface` input with a 1px `line` border and 6px radius, label above it in 13px / 500. A
-primary button is `text` on `bg` inverted; a destructive one is `down`. The probe-group
-admin page is a list-with-add/edit/delete like every other admin list, plus each group's
-own member list — reuse the same row and reorder affordances the probe list already needs.
+The page view, sign-in, admin lists, probe form and probe-group admin page were not drawn,
+but plan 012 built them from the tokens and components above — panels, table rows, section
+labels, status chips, the link style and the empty state; a form field as a `surface` input
+with a 1px `line` border and 6px radius, label above it in 13px / 500; a primary button as
+`text` on `bg` inverted, a destructive one as `down`. The probe-group admin page follows the
+same list-with-add/edit/delete shape as every other admin list, plus each group's own
+member list, reusing the probe list's row and reorder affordances.
+
+**Still not drawn**: the API-key reveal flow. The Backups + API-key admin module (008) has
+not landed — `admin-api-keys-page.tsx` is still the Phase-0 placeholder, given only shell
+and typography styling. When 008 lands, its key list follows the `AdminTable` pattern above
+and the reveal-once block gets the same form-field styling, with its `role="alert"` warning
+left exactly as assertive as that module specifies.

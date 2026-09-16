@@ -18,15 +18,21 @@ that exists: PostgreSQL + EF Core migrations (`migrate` verb, never on startup),
 Identity with a configuration-supplied bootstrap administrator and a cookie session, an
 `ApiKey` authentication scheme (`hmn_…` keys, `create-api-key` verb), a `Reader` policy
 switched by `Auth:RequireSignInForReaders`, an `IAlertEmailSender` seam (Resend or the
-log), `/health`, `/api/v1/meta`, `/api/v1/auth/*`, OpenAPI at `/api/v1/openapi.json`, an
-unstyled React shell with a working sign-in form, and the three-suite gate.
+log), `/health`, `/api/v1/meta`, `/api/v1/auth/*`, OpenAPI at `/api/v1/openapi.json`, a
+styled React shell with a working sign-in form, and the three-suite gate.
 
-**There is deliberately no style yet.** No theme tokens, no fonts, no `className` on any
-element. The design pass (plan 012) owns that, and its target is now fixed: the **Status
-board** direction, dark by default, specified under "Design guidelines" in
-`docs/design-brief.md` and pictured in `docs/design/`. Until plan 012 lands, do not add
-classes to make something "look right". Semantic HTML, landmarks and accessible names are
-the contract with the tests; keep them.
+**The design pass (plan 012) has landed.** The SPA renders the **Status board** direction,
+dark by default, per "Design guidelines" in `docs/design-brief.md` and pictured in
+`docs/design/`: `@theme` tokens and self-hosted IBM Plex fonts in `src/Homon.Web/src/
+index.css`, the theme toggle and `public/theme-bootstrap.js`, `StatusChip`/`Sparkline` and
+the panel/row/empty-state primitives, applied to every surface a module plan had already
+built by the time it ran (dashboard, admin lists, the Ping/HTTP probe form, the page view
+and editor). Surfaces whose owning module has not landed yet — Backups, Calendar, the
+SMB/SNMP probe fieldsets, the API-key reveal flow — remain unstyled placeholders until
+their own plan runs and reuses these primitives; that is expected, not drift. Semantic
+HTML, landmarks and accessible names are still the contract with the tests — the unit and
+Playwright suites query by role and name, and every `className` this pass added had to
+keep them unchanged.
 
 ## The gate
 
