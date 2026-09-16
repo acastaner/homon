@@ -23,4 +23,22 @@ setup('the administrator is signed in', async ({ page }) => {
   ).toBeVisible()
 
   await page.context().storageState({ path: ADMIN_STATE })
+
+  // Seeds `/pages/welcome`, the page READER_ROUTES (helpers.ts) walks — idempotent, because
+  // the CI database is shared across every spec in a run and this setup project itself only
+  // runs once, but a developer re-running `npx playwright test auth.setup` by hand against a
+  // database `--keep` left up must not fail on a duplicate slug.
+  const existing = await page.request.get('/api/v1/admin/pages')
+  const already = (await existing.json()).some((p: { slug: string }) => p.slug === 'welcome')
+
+  if (!already) {
+    await page.request.post('/api/v1/pages', {
+      data: {
+        slug: 'welcome',
+        title: 'Welcome',
+        bodyHtml: '<p>This is a seeded page for the end-to-end suite.</p>',
+        isPublished: true,
+      },
+    })
+  }
 })

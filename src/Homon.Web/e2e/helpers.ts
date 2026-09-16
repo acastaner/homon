@@ -14,6 +14,7 @@ export const ADMIN_ROUTES = [
   { path: '/admin/probe-groups', name: 'probe groups' },
   { path: '/admin/links', name: 'links' },
   { path: '/admin/pages', name: 'pages' },
+  { path: '/admin/pages/new', name: 'the page editor' },
   { path: '/admin/api-keys', name: 'API keys' },
 ] as const
 
