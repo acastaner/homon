@@ -95,13 +95,22 @@ export function DashboardPage() {
 
   return (
     <>
-      <h1>Dashboard</h1>
-      {totals ? (
-        <p>
-          {totals.up} up · {totals.unstable} unstable · {totals.down} down · {totals.paused} paused ·{' '}
-          {formatUptime(totals.uptimePercent)} uptime, 30 days
-        </p>
-      ) : null}
+      <div className="flex flex-col gap-3 border-b border-line-strong pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
+        <h1 className="text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">Dashboard</h1>
+        {totals ? (
+          // Deliberately flat text, no per-value <span> — dashboard-page.test.tsx's
+          // `getByText(/1 up · 0 unstable · …/)` matches only a node's DIRECT text-node
+          // children (testing-library's getNodeText), not text nested inside child
+          // elements, so wrapping the numbers to colour them individually would make no
+          // element's own text ever equal the full string again. Decision 7 (the test
+          // suite is the contract) wins over the brief's "unstable and down in their
+          // status colours" here; the mono treatment applies to the line as a whole.
+          <p className="mono text-[13px] text-muted sm:text-sm">
+            {totals.up} up · {totals.unstable} unstable · {totals.down} down · {totals.paused} paused ·{' '}
+            {formatUptime(totals.uptimePercent)} uptime, 30 days
+          </p>
+        ) : null}
+      </div>
       {sections.map((section) => (
         <section key={section.id} aria-labelledby={section.headingId}>
           <h2 id={section.headingId}>{section.heading}</h2>
