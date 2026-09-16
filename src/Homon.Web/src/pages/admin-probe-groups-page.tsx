@@ -13,6 +13,18 @@ import {
 import { useProbes, type Probe } from '@/lib/probes'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
+const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
+const FIELD_LABEL = 'text-[13px] font-medium text-text'
+const FIELD_INPUT =
+  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
+const BUTTON_SECONDARY =
+  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_PRIMARY =
+  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_DANGER =
+  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
+const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
+
 /**
  * The probe-group admin page: reorder groups, rename or delete one (its probes are kept),
  * and manage each group's membership and their order within it. Every action here sends the
@@ -44,13 +56,15 @@ export function AdminProbeGroupsPage() {
 
   return (
     <>
-      <h1>Probe groups</h1>
+      <h1 className={PAGE_H1}>Probe groups</h1>
       {orderedGroups.length === 0 ? (
-        <p>No groups yet. Add one below.</p>
+        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
+          No groups yet. Add one below.
+        </p>
       ) : (
-        <ol aria-label="Probe groups">
+        <ol aria-label="Probe groups" className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4">
           {orderedGroups.map((group, index) => (
-            <li key={group.id}>
+            <li key={group.id} className="py-3">
               <GroupCard
                 group={group}
                 allProbes={allProbes}
@@ -137,93 +151,104 @@ function GroupCard({
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-3">
       {isRenaming ? (
-        <form onSubmit={onRenameSubmit} aria-label={`Rename ${group.name}`}>
-          <p>
-            <label htmlFor={`rename-${group.id}`}>New name for {group.name}</label>
+        <form onSubmit={onRenameSubmit} aria-label={`Rename ${group.name}`} className="flex flex-col gap-2">
+          <p className="flex flex-col gap-1">
+            <label htmlFor={`rename-${group.id}`} className={FIELD_LABEL}>
+              New name for {group.name}
+            </label>
             <input
               id={`rename-${group.id}`}
               required
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
+              className={FIELD_INPUT}
             />
           </p>
           {renameGroup.isError ? (
-            <p role="alert">{problemDetail(renameGroup.error) ?? 'Could not rename the group. Try again.'}</p>
+            <p role="alert" className={ALERT}>
+              {problemDetail(renameGroup.error) ?? 'Could not rename the group. Try again.'}
+            </p>
           ) : null}
-          <p>
-            <button type="submit" disabled={renameGroup.isPending}>
+          <p className="flex gap-2">
+            <button type="submit" disabled={renameGroup.isPending} className={BUTTON_PRIMARY}>
               Save name
-            </button>{' '}
-            <button type="button" onClick={() => setIsRenaming(false)}>
+            </button>
+            <button type="button" onClick={() => setIsRenaming(false)} className={BUTTON_SECONDARY}>
               Cancel
             </button>
           </p>
         </form>
       ) : (
-        <p>
-          <strong>{group.name}</strong>
+        <p className="text-[15px]">
+          <strong className="font-semibold">{group.name}</strong>
         </p>
       )}
-      <p>
-        <button type="button" onClick={onMoveUp} disabled={!canMoveUp}>
+      <p className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onMoveUp} disabled={!canMoveUp} className={BUTTON_SECONDARY}>
           Move {group.name} up
-        </button>{' '}
-        <button type="button" onClick={onMoveDown} disabled={!canMoveDown}>
+        </button>
+        <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className={BUTTON_SECONDARY}>
           Move {group.name} down
-        </button>{' '}
+        </button>
         {!isRenaming ? (
-          <button type="button" onClick={() => setIsRenaming(true)}>
+          <button type="button" onClick={() => setIsRenaming(true)} className={BUTTON_SECONDARY}>
             Rename {group.name}
           </button>
-        ) : null}{' '}
+        ) : null}
         {isConfirmingDelete ? (
           <>
             <button
               type="button"
               onClick={() => deleteGroup.mutate(group.id, { onSuccess: () => setIsConfirmingDelete(false) })}
+              className={BUTTON_DANGER}
             >
               Confirm delete {group.name}
-            </button>{' '}
-            <button type="button" onClick={() => setIsConfirmingDelete(false)}>
+            </button>
+            <button type="button" onClick={() => setIsConfirmingDelete(false)} className={BUTTON_SECONDARY}>
               Cancel delete {group.name}
             </button>
           </>
         ) : (
-          <button type="button" onClick={() => setIsConfirmingDelete(true)}>
+          <button type="button" onClick={() => setIsConfirmingDelete(true)} className={BUTTON_SECONDARY}>
             Delete {group.name}
           </button>
         )}
-        {isConfirmingDelete ? <span> Its probes are kept.</span> : null}
+        {isConfirmingDelete ? <span className="text-[13px] text-muted">Its probes are kept.</span> : null}
       </p>
       {members.length === 0 ? (
-        <p>No probes in {group.name} yet.</p>
+        <p className="text-[13.5px] text-muted">No probes in {group.name} yet.</p>
       ) : (
-        <ul aria-label={`Probes in ${group.name}`}>
+        <ul aria-label={`Probes in ${group.name}`} className="flex list-none flex-col divide-y divide-line rounded-md border border-line px-3">
           {members.map((probe, index) => (
-            <li key={probe.id}>
-              {probe.name}{' '}
-              <button type="button" onClick={() => moveMember(probe.id, -1)} disabled={index === 0}>
-                Move {probe.name} up
-              </button>{' '}
-              <button
-                type="button"
-                onClick={() => moveMember(probe.id, 1)}
-                disabled={index === members.length - 1}
-              >
-                Move {probe.name} down
-              </button>{' '}
-              <button type="button" onClick={() => removeMember(probe.id)}>
-                Remove {probe.name}
-              </button>
+            <li key={probe.id} className="flex flex-wrap items-center gap-2 py-2">
+              <span className="text-[14px]">{probe.name}</span>
+              <span className="ml-auto flex flex-wrap gap-2">
+                <button type="button" onClick={() => moveMember(probe.id, -1)} disabled={index === 0} className={BUTTON_SECONDARY}>
+                  Move {probe.name} up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveMember(probe.id, 1)}
+                  disabled={index === members.length - 1}
+                  className={BUTTON_SECONDARY}
+                >
+                  Move {probe.name} down
+                </button>
+                <button type="button" onClick={() => removeMember(probe.id)} className={BUTTON_SECONDARY}>
+                  Remove {probe.name}
+                </button>
+              </span>
             </li>
           ))}
         </ul>
       )}
-      <p>
-        <label htmlFor={`add-probe-${group.id}`}>Add probe to {group.name}</label>
-        <select id={`add-probe-${group.id}`} defaultValue="" onChange={addMember}>
+      <p className="flex flex-col gap-1">
+        <label htmlFor={`add-probe-${group.id}`} className={FIELD_LABEL}>
+          Add probe to {group.name}
+        </label>
+        <select id={`add-probe-${group.id}`} defaultValue="" onChange={addMember} className={FIELD_INPUT}>
           <option value="">Choose a probe…</option>
           {nonMembers.map((probe) => (
             <option key={probe.id} value={probe.id}>
@@ -232,7 +257,7 @@ function GroupCard({
           ))}
         </select>
       </p>
-    </>
+    </div>
   )
 }
 
@@ -252,22 +277,29 @@ function CreateGroupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} aria-labelledby="create-group-heading">
-      <h2 id="create-group-heading">Add a group</h2>
-      <p>
-        <label htmlFor="new-group-name">Group name</label>
+    <form onSubmit={onSubmit} aria-labelledby="create-group-heading" className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5">
+      <h2 id="create-group-heading" className="text-[15px] font-semibold">
+        Add a group
+      </h2>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="new-group-name" className={FIELD_LABEL}>
+          Group name
+        </label>
         <input
           id="new-group-name"
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
+          className={FIELD_INPUT}
         />
       </p>
       {createGroup.isError ? (
-        <p role="alert">{problemDetail(createGroup.error) ?? 'Could not add the group. Try again.'}</p>
+        <p role="alert" className={ALERT}>
+          {problemDetail(createGroup.error) ?? 'Could not add the group. Try again.'}
+        </p>
       ) : null}
       <p>
-        <button type="submit" disabled={createGroup.isPending}>
+        <button type="submit" disabled={createGroup.isPending} className={BUTTON_PRIMARY}>
           Add group
         </button>
       </p>

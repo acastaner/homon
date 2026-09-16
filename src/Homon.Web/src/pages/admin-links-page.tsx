@@ -14,11 +14,21 @@ import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 const EMPTY_FIELDS: LinkFields = { title: '', url: '', description: '' }
 
+const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
+const FIELD_LABEL = 'text-[13px] font-medium text-text'
+const FIELD_INPUT =
+  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
+const BUTTON_SECONDARY =
+  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_PRIMARY =
+  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_DANGER =
+  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
+const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
+
 /**
  * The links admin page: reorder with up/down buttons, edit or delete a row, and add a new
- * one through a single shared form at the bottom of the list — not per-row or modal editing,
- * the simplest shape that satisfies "add, edit, delete, reorder" without a component the
- * design pass has to undo (plan 006).
+ * one through a single shared form at the bottom of the list.
  */
 export function AdminLinksPage() {
   useDocumentTitle(pageTitle('Links', 'Admin'))
@@ -58,37 +68,45 @@ export function AdminLinksPage() {
 
   return (
     <>
-      <h1>Links</h1>
+      <h1 className={PAGE_H1}>Links</h1>
       {orderedLinks.length === 0 ? (
-        <p>No links yet.</p>
+        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
+          No links yet.
+        </p>
       ) : (
-        <ol aria-label="Links">
+        <ol aria-label="Links" className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4">
           {orderedLinks.map((link, index) => (
-            <li key={link.id}>
-              <a href={link.url} target="_blank" rel="noopener noreferrer">
-                {link.title}
-              </a>
-              {link.description ? <span> {link.description}</span> : null}{' '}
-              <button
-                type="button"
-                onClick={() => moveLink(link.id, -1)}
-                disabled={index === 0}
-              >
-                Move {link.title} up
-              </button>{' '}
-              <button
-                type="button"
-                onClick={() => moveLink(link.id, 1)}
-                disabled={index === orderedLinks.length - 1}
-              >
-                Move {link.title} down
-              </button>{' '}
-              <button type="button" onClick={() => startEditing(link)}>
-                Edit {link.title}
-              </button>{' '}
-              <button type="button" onClick={() => deleteLink.mutate(link.id)}>
-                Delete {link.title}
-              </button>
+            <li key={link.id} className="flex flex-col gap-2 py-3">
+              <p className="text-[15px]">
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+                >
+                  {link.title}
+                </a>
+                {link.description ? <span className="ml-2 text-[14px] text-muted">{link.description}</span> : null}
+              </p>
+              <p className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => moveLink(link.id, -1)} disabled={index === 0} className={BUTTON_SECONDARY}>
+                  Move {link.title} up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveLink(link.id, 1)}
+                  disabled={index === orderedLinks.length - 1}
+                  className={BUTTON_SECONDARY}
+                >
+                  Move {link.title} down
+                </button>
+                <button type="button" onClick={() => startEditing(link)} className={BUTTON_SECONDARY}>
+                  Edit {link.title}
+                </button>
+                <button type="button" onClick={() => deleteLink.mutate(link.id)} className={BUTTON_DANGER}>
+                  Delete {link.title}
+                </button>
+              </p>
             </li>
           ))}
         </ol>
@@ -143,44 +161,57 @@ function LinkForm({
   }
 
   return (
-    <form onSubmit={onSubmit} aria-labelledby="link-form-heading">
-      <h2 id="link-form-heading">{editingId === null ? 'Add a link' : 'Edit link'}</h2>
-      <p>
-        <label htmlFor="link-title">Title</label>
+    <form onSubmit={onSubmit} aria-labelledby="link-form-heading" className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5">
+      <h2 id="link-form-heading" className="text-[15px] font-semibold">
+        {editingId === null ? 'Add a link' : 'Edit link'}
+      </h2>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="link-title" className={FIELD_LABEL}>
+          Title
+        </label>
         <input
           id="link-title"
           required
           value={fields.title}
           onChange={(event) => onFieldsChange({ ...fields, title: event.target.value })}
+          className={FIELD_INPUT}
         />
       </p>
-      <p>
-        <label htmlFor="link-url">URL</label>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="link-url" className={FIELD_LABEL}>
+          URL
+        </label>
         <input
           id="link-url"
           type="url"
           required
           value={fields.url}
           onChange={(event) => onFieldsChange({ ...fields, url: event.target.value })}
+          className={FIELD_INPUT}
         />
       </p>
-      <p>
-        <label htmlFor="link-description">Description</label>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="link-description" className={FIELD_LABEL}>
+          Description
+        </label>
         <input
           id="link-description"
           value={fields.description}
           onChange={(event) => onFieldsChange({ ...fields, description: event.target.value })}
+          className={FIELD_INPUT}
         />
       </p>
       {activeMutation.isError ? (
-        <p role="alert">{problemDetail(activeMutation.error) ?? 'Could not save the link. Try again.'}</p>
+        <p role="alert" className={ALERT}>
+          {problemDetail(activeMutation.error) ?? 'Could not save the link. Try again.'}
+        </p>
       ) : null}
-      <p>
-        <button type="submit" disabled={activeMutation.isPending}>
+      <p className="flex gap-2">
+        <button type="submit" disabled={activeMutation.isPending} className={BUTTON_PRIMARY}>
           {editingId === null ? 'Add link' : 'Save changes'}
-        </button>{' '}
+        </button>
         {editingId === null ? null : (
-          <button type="button" onClick={onCancel}>
+          <button type="button" onClick={onCancel} className={BUTTON_SECONDARY}>
             Cancel
           </button>
         )}

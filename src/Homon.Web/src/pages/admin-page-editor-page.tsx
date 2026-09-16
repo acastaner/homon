@@ -8,6 +8,16 @@ import { problemDetail } from '@/lib/api'
 import { useAdminPages, useCreatePage, usePage, useUpdatePage } from '@/lib/pages'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
+const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
+const FIELD_LABEL = 'text-[13px] font-medium text-text'
+const FIELD_INPUT =
+  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
+const BUTTON_SECONDARY =
+  'inline-flex h-9 min-h-10 items-center justify-center rounded-md border border-line px-2.5 text-[13px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_PRIMARY =
+  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
+
 /**
  * Turns a title into a slug suggestion: lower-case, non-alphanumeric runs collapsed to one
  * hyphen, no leading or trailing hyphen — the same shape `Page.SlugPattern` requires
@@ -51,7 +61,13 @@ export function AdminPageEditorPage() {
       TiptapLink.configure({ openOnClick: false, autolink: false }),
     ],
     content: '',
-    editorProps: { attributes: { role: 'textbox', 'aria-label': 'Body' } },
+    editorProps: {
+      attributes: {
+        role: 'textbox',
+        'aria-label': 'Body',
+        class: 'prose min-h-[220px] rounded-md border border-line bg-bg px-3 py-2 outline-none focus:border-line-strong',
+      },
+    },
   })
 
   useDocumentTitle(pageTitle(isNew ? 'New page' : title || 'Edit page', 'Admin'))
@@ -120,47 +136,62 @@ export function AdminPageEditorPage() {
 
   return (
     <>
-      <h1>{isNew ? 'New page' : `Edit ${title || 'page'}`}</h1>
+      <h1 className={PAGE_H1}>{isNew ? 'New page' : `Edit ${title || 'page'}`}</h1>
       <p>
-        <RouterLink to="/admin/pages">Back to pages</RouterLink>
+        <RouterLink to="/admin/pages" className="text-[14px] text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
+          Back to pages
+        </RouterLink>
       </p>
-      <form onSubmit={onSubmit} aria-labelledby="page-form-heading">
-        <h2 id="page-form-heading">{isNew ? 'New page' : 'Edit page'}</h2>
-        <p>
-          <label htmlFor="page-title">Title</label>
+      <form onSubmit={onSubmit} aria-labelledby="page-form-heading" className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5">
+        <h2 id="page-form-heading" className="text-[15px] font-semibold">
+          {isNew ? 'New page' : 'Edit page'}
+        </h2>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="page-title" className={FIELD_LABEL}>
+            Title
+          </label>
           <input
             id="page-title"
             required
             value={title}
             onChange={(event) => onTitleChange(event.target.value)}
+            className={FIELD_INPUT}
           />
         </p>
-        <p>
-          <label htmlFor="page-slug">Slug</label>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="page-slug" className={FIELD_LABEL}>
+            Slug
+          </label>
           <input
             id="page-slug"
             required
             value={slug}
             onChange={(event) => onSlugChange(event.target.value)}
+            className={`${FIELD_INPUT} mono`}
           />
         </p>
         <p>
-          <label>
+          <label className="flex items-center gap-2 text-[14px] text-text">
             <input
               type="checkbox"
               checked={isPublished}
               onChange={(event) => setIsPublished(event.target.checked)}
-            />{' '}
+              className="size-4 rounded border-line"
+            />
             Published
           </label>
         </p>
-        <EditorToolbar editor={editor} />
-        <EditorContent editor={editor} />
+        <div className="flex flex-col gap-2">
+          <EditorToolbar editor={editor} />
+          <EditorContent editor={editor} />
+        </div>
         {mutation.isError ? (
-          <p role="alert">{problemDetail(mutation.error) ?? 'Could not save the page. Try again.'}</p>
+          <p role="alert" className={ALERT}>
+            {problemDetail(mutation.error) ?? 'Could not save the page. Try again.'}
+          </p>
         ) : null}
         <p>
-          <button type="submit" disabled={mutation.isPending}>
+          <button type="submit" disabled={mutation.isPending} className={BUTTON_PRIMARY}>
             {isNew ? 'Create page' : 'Save changes'}
           </button>
         </p>
@@ -198,82 +229,95 @@ function EditorToolbar({ editor }: { editor: Editor | null }) {
   }
 
   return (
-    <p>
-      <button type="button" aria-label="Bold" disabled={!editor} onClick={() => editor?.chain().focus().toggleBold().run()}>
+    <p className="flex flex-wrap gap-1.5 rounded-md border border-line bg-bg p-1.5">
+      <button type="button" aria-label="Bold" disabled={!editor} onClick={() => editor?.chain().focus().toggleBold().run()} className={BUTTON_SECONDARY}>
         Bold
-      </button>{' '}
-      <button type="button" aria-label="Italic" disabled={!editor} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+      </button>
+      <button type="button" aria-label="Italic" disabled={!editor} onClick={() => editor?.chain().focus().toggleItalic().run()} className={BUTTON_SECONDARY}>
         Italic
-      </button>{' '}
-      <button type="button" aria-label="Strikethrough" disabled={!editor} onClick={() => editor?.chain().focus().toggleStrike().run()}>
+      </button>
+      <button
+        type="button"
+        aria-label="Strikethrough"
+        disabled={!editor}
+        onClick={() => editor?.chain().focus().toggleStrike().run()}
+        className={BUTTON_SECONDARY}
+      >
         Strikethrough
-      </button>{' '}
-      <button type="button" aria-label="Code" disabled={!editor} onClick={() => editor?.chain().focus().toggleCode().run()}>
+      </button>
+      <button type="button" aria-label="Code" disabled={!editor} onClick={() => editor?.chain().focus().toggleCode().run()} className={BUTTON_SECONDARY}>
         Code
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Heading 2"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+        className={BUTTON_SECONDARY}
       >
         Heading 2
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Heading 3"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+        className={BUTTON_SECONDARY}
       >
         Heading 3
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Heading 4"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()}
+        className={BUTTON_SECONDARY}
       >
         Heading 4
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Bullet list"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleBulletList().run()}
+        className={BUTTON_SECONDARY}
       >
         Bullet list
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Numbered list"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+        className={BUTTON_SECONDARY}
       >
         Numbered list
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Blockquote"
         disabled={!editor}
         onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+        className={BUTTON_SECONDARY}
       >
         Blockquote
-      </button>{' '}
-      <button type="button" aria-label="Link" disabled={!editor} onClick={runLink}>
+      </button>
+      <button type="button" aria-label="Link" disabled={!editor} onClick={runLink} className={BUTTON_SECONDARY}>
         Link
-      </button>{' '}
+      </button>
       <button
         type="button"
         aria-label="Horizontal rule"
         disabled={!editor}
         onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+        className={BUTTON_SECONDARY}
       >
         Horizontal rule
-      </button>{' '}
-      <button type="button" aria-label="Undo" disabled={!editor} onClick={() => editor?.chain().focus().undo().run()}>
+      </button>
+      <button type="button" aria-label="Undo" disabled={!editor} onClick={() => editor?.chain().focus().undo().run()} className={BUTTON_SECONDARY}>
         Undo
-      </button>{' '}
-      <button type="button" aria-label="Redo" disabled={!editor} onClick={() => editor?.chain().focus().redo().run()}>
+      </button>
+      <button type="button" aria-label="Redo" disabled={!editor} onClick={() => editor?.chain().focus().redo().run()} className={BUTTON_SECONDARY}>
         Redo
       </button>
     </p>

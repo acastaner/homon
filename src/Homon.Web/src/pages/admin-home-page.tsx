@@ -7,28 +7,29 @@ export function AdminHomePage() {
 
   return (
     <>
-      <h1>Admin</h1>
-      <p>Manage what the household sees. Each section arrives with its module.</p>
+      <h1 className="border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">
+        Admin
+      </h1>
+      <p className="text-muted">Manage what the household sees. Each section arrives with its module.</p>
       <nav aria-label="Admin sections">
-        <ul>
-          <li>
-            <Link to="/admin/probes">Probes</Link>
-          </li>
-          <li>
-            <Link to="/admin/probe-groups">Probe groups</Link>
-          </li>
-          <li>
-            <Link to="/admin/links">Links</Link>
-          </li>
-          <li>
-            <Link to="/admin/pages">Pages</Link>
-          </li>
-          <li>
-            <Link to="/admin/api-keys">API keys</Link>
-          </li>
-          <li>
-            <Link to="/admin/weather">Weather</Link>
-          </li>
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface px-4">
+          {[
+            { to: '/admin/probes', label: 'Probes' },
+            { to: '/admin/probe-groups', label: 'Probe groups' },
+            { to: '/admin/links', label: 'Links' },
+            { to: '/admin/pages', label: 'Pages' },
+            { to: '/admin/api-keys', label: 'API keys' },
+            { to: '/admin/weather', label: 'Weather' },
+          ].map((item) => (
+            <li key={item.to}>
+              <Link
+                to={item.to}
+                className="flex min-h-12 items-center text-[15px] font-medium text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
         </ul>
       </nav>
     </>

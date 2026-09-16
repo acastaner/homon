@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { ADMIN_ROUTES, READER_ROUTES, expectNoHorizontalOverflow } from './helpers'
+import { ADMIN_ROUTES, READER_ROUTES, expectNoHorizontalOverflow, expectTappable } from './helpers'
 
 /**
  * Every page fits the width it is given. Runs in both projects: the mobile one is where a
@@ -31,4 +31,16 @@ test('the dashboard names its sections', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Services' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Links' })).toBeVisible()
+})
+
+/**
+ * Every row-action button plan 012 newly styled (move/edit/pause/delete, and the theme
+ * toggle already covered by e2e/theme.spec.ts) meets the 40px floor at both viewport
+ * projects, not just at the width it happened to look right at.
+ */
+test('admin row-action buttons are tappable', async ({ page }) => {
+  for (const path of ['/admin/probes', '/admin/probe-groups', '/admin/links', '/admin/pages']) {
+    await page.goto(path)
+    await expectTappable(page, 'button')
+  }
 })

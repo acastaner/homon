@@ -26,10 +26,22 @@ const KIND_LABELS: Record<ProbeKind, string> = {
   snmp: 'SNMP',
 }
 
+const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
+const FIELD_LABEL = 'text-[13px] font-medium text-text'
+const FIELD_INPUT =
+  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
+const BUTTON_SECONDARY =
+  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_PRIMARY =
+  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+const FIELDSET = 'flex flex-col gap-4 rounded-md border border-line p-4'
+const LEGEND = 'px-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted'
+const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
+
 /**
  * The probe admin page: an ordered list of existing probes with move/edit/pause/delete
  * actions, and a form beneath it that both adds a new probe and edits whichever one is
- * currently selected. Unstyled — no `className` anywhere; plan 012 owns the look.
+ * currently selected.
  */
 export function AdminProbesPage() {
   useDocumentTitle(pageTitle('Probes', 'Admin'))
@@ -62,38 +74,45 @@ export function AdminProbesPage() {
 
   return (
     <>
-      <h1>Probes</h1>
+      <h1 className={PAGE_H1}>Probes</h1>
       {orderedProbes.length === 0 ? (
-        <p>No probes yet. Add one below.</p>
+        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
+          No probes yet. Add one below.
+        </p>
       ) : (
-        <ol aria-label="Probes">
+        <ol aria-label="Probes" className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4">
           {orderedProbes.map((probe, index) => (
-            <li key={probe.id}>
-              <p>
-                <strong>{probe.name}</strong> — {probe.status}
-                {probe.lastDetail ? ` (${probe.lastDetail})` : null}
+            <li key={probe.id} className="flex flex-col gap-2 py-3">
+              <p className="text-[15px]">
+                <strong className="font-semibold">{probe.name}</strong>{' '}
+                <span className="text-muted">
+                  — {probe.status}
+                  {probe.lastDetail ? ` (${probe.lastDetail})` : null}
+                </span>
               </p>
-              <p>
-                <button type="button" onClick={() => move(probe.id, -1)} disabled={index === 0}>
+              <p className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => move(probe.id, -1)} disabled={index === 0} className={BUTTON_SECONDARY}>
                   Move {probe.name} up
-                </button>{' '}
+                </button>
                 <button
                   type="button"
                   onClick={() => move(probe.id, 1)}
                   disabled={index === orderedProbes.length - 1}
+                  className={BUTTON_SECONDARY}
                 >
                   Move {probe.name} down
-                </button>{' '}
-                <button type="button" onClick={() => setEditingId(probe.id)}>
+                </button>
+                <button type="button" onClick={() => setEditingId(probe.id)} className={BUTTON_SECONDARY}>
                   Edit {probe.name}
-                </button>{' '}
+                </button>
                 <button
                   type="button"
                   onClick={() => setPaused.mutate({ id: probe.id, isPaused: !probe.isPaused })}
                   disabled={setPaused.isPending}
+                  className={BUTTON_SECONDARY}
                 >
                   {probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
-                </button>{' '}
+                </button>
                 {confirmingDeleteId === probe.id ? (
                   <>
                     <button
@@ -101,15 +120,16 @@ export function AdminProbesPage() {
                       onClick={() =>
                         deleteProbe.mutate(probe.id, { onSuccess: () => setConfirmingDeleteId(null) })
                       }
+                      className="inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20"
                     >
                       Confirm delete {probe.name}
-                    </button>{' '}
-                    <button type="button" onClick={() => setConfirmingDeleteId(null)}>
+                    </button>
+                    <button type="button" onClick={() => setConfirmingDeleteId(null)} className={BUTTON_SECONDARY}>
                       Cancel delete {probe.name}
                     </button>
                   </>
                 ) : (
-                  <button type="button" onClick={() => setConfirmingDeleteId(probe.id)}>
+                  <button type="button" onClick={() => setConfirmingDeleteId(probe.id)} className={BUTTON_SECONDARY}>
                     Delete {probe.name}
                   </button>
                 )}
@@ -273,38 +293,53 @@ function ProbeForm({
   }
 
   return (
-    <form onSubmit={onSubmit} aria-labelledby="probe-form-heading">
-      <h2 id="probe-form-heading">{isEditing ? `Edit ${probe.name}` : 'Add a probe'}</h2>
-      <p>
-        <label htmlFor="probe-name">Name</label>
+    <form
+      onSubmit={onSubmit}
+      aria-labelledby="probe-form-heading"
+      className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5"
+    >
+      <h2 id="probe-form-heading" className="text-[15px] font-semibold">
+        {isEditing ? `Edit ${probe.name}` : 'Add a probe'}
+      </h2>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="probe-name" className={FIELD_LABEL}>
+          Name
+        </label>
         <input
           id="probe-name"
           name="name"
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
+          className={FIELD_INPUT}
         />
       </p>
-      <p>
-        <label htmlFor="probe-host">Host</label>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="probe-host" className={FIELD_LABEL}>
+          Host
+        </label>
         <input
           id="probe-host"
           name="host"
           required
           value={host}
           onChange={(event) => setHost(event.target.value)}
+          className={FIELD_INPUT}
         />
       </p>
       {isEditing ? (
-        <p>Kind: {KIND_LABELS[probe.kind]} — cannot be changed after creation.</p>
+        <p className="text-[14px] text-muted">Kind: {KIND_LABELS[probe.kind]} — cannot be changed after creation.</p>
       ) : (
-        <p>
-          <label htmlFor="probe-kind">Kind</label>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="probe-kind" className={FIELD_LABEL}>
+            Kind
+          </label>
           <select
             id="probe-kind"
             name="kind"
             value={kind}
             onChange={(event) => setKind(event.target.value as 'ping' | 'http')}
+            className={FIELD_INPUT}
           >
             {CREATABLE_KINDS.map((option) => (
               <option key={option} value={option}>
@@ -314,8 +349,10 @@ function ProbeForm({
           </select>
         </p>
       )}
-      <p>
-        <label htmlFor="probe-poll-interval">Poll interval (seconds)</label>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="probe-poll-interval" className={FIELD_LABEL}>
+          Poll interval (seconds)
+        </label>
         <input
           id="probe-poll-interval"
           name="pollIntervalSeconds"
@@ -323,10 +360,13 @@ function ProbeForm({
           required
           value={pollIntervalSeconds}
           onChange={(event) => setPollIntervalSeconds(Number(event.target.value))}
+          className={FIELD_INPUT}
         />
       </p>
-      <p>
-        <label htmlFor="probe-failure-threshold">Failure threshold</label>
+      <p className="flex flex-col gap-1">
+        <label htmlFor="probe-failure-threshold" className={FIELD_LABEL}>
+          Failure threshold
+        </label>
         <input
           id="probe-failure-threshold"
           name="failureThreshold"
@@ -334,35 +374,44 @@ function ProbeForm({
           required
           value={failureThreshold}
           onChange={(event) => setFailureThreshold(Number(event.target.value))}
+          className={FIELD_INPUT}
         />
       </p>
       {isHttp ? (
         // 004 (SMB) and 005 (SNMP) add a sibling fieldset here, keyed the same way, rather
         // than restructuring this block — see plan 003's Step 6 and its Maintenance notes.
-        <fieldset id="probe-http-fieldset">
-          <legend>HTTP</legend>
-          <p>
-            <label htmlFor="probe-http-method">Method</label>
+        <fieldset id="probe-http-fieldset" className={FIELDSET}>
+          <legend className={LEGEND}>HTTP</legend>
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-http-method" className={FIELD_LABEL}>
+              Method
+            </label>
             <select
               id="probe-http-method"
               value={method}
               onChange={(event) => setMethod(event.target.value as 'head' | 'get')}
+              className={FIELD_INPUT}
             >
               <option value="get">GET</option>
               <option value="head">HEAD</option>
             </select>
           </p>
-          <p>
-            <label htmlFor="probe-http-path">Path</label>
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-http-path" className={FIELD_LABEL}>
+              Path
+            </label>
             <input
               id="probe-http-path"
               required
               value={path}
               onChange={(event) => setPath(event.target.value)}
+              className={FIELD_INPUT}
             />
           </p>
-          <p>
-            <label htmlFor="probe-http-timeout">Timeout (seconds)</label>
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-http-timeout" className={FIELD_LABEL}>
+              Timeout (seconds)
+            </label>
             <input
               id="probe-http-timeout"
               type="number"
@@ -371,77 +420,91 @@ function ProbeForm({
               required
               value={timeoutSeconds}
               onChange={(event) => setTimeoutSeconds(Number(event.target.value))}
+              className={FIELD_INPUT}
             />
           </p>
           <p>
-            <label>
+            <label className="flex items-center gap-2 text-[14px] text-text">
               <input
                 type="checkbox"
                 checked={useHttps}
                 onChange={(event) => setUseHttps(event.target.checked)}
-              />{' '}
+                className="size-4 rounded border-line"
+              />
               Use HTTPS
             </label>
           </p>
           <p>
-            <label>
+            <label className="flex items-center gap-2 text-[14px] text-text">
               <input
                 type="checkbox"
                 checked={ignoreCertificateErrors}
                 onChange={(event) => setIgnoreCertificateErrors(event.target.checked)}
-              />{' '}
+                className="size-4 rounded border-line"
+              />
               Skip certificate validation (self-signed certificates)
             </label>
           </p>
-          <p>
-            <label htmlFor="probe-http-expected-status">Expected status code</label>
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-http-expected-status" className={FIELD_LABEL}>
+              Expected status code
+            </label>
             <input
               id="probe-http-expected-status"
               type="number"
               value={expectedStatusCode}
               onChange={(event) => setExpectedStatusCode(event.target.value)}
+              className={FIELD_INPUT}
             />
           </p>
           <p>
-            <label>
+            <label className="flex items-center gap-2 text-[14px] text-text">
               <input
                 type="checkbox"
                 checked={expectedStatusCodeNegate}
                 onChange={(event) => setExpectedStatusCodeNegate(event.target.checked)}
-              />{' '}
+                className="size-4 rounded border-line"
+              />
               Treat that status code as unexpected instead
             </label>
           </p>
           {method === 'get' ? (
             <>
-              <p>
-                <label htmlFor="probe-http-expected-body">Expected body text</label>
+              <p className="flex flex-col gap-1">
+                <label htmlFor="probe-http-expected-body" className={FIELD_LABEL}>
+                  Expected body text
+                </label>
                 <input
                   id="probe-http-expected-body"
                   value={expectedBodyText}
                   onChange={(event) => setExpectedBodyText(event.target.value)}
+                  className={FIELD_INPUT}
                 />
               </p>
               <p>
-                <label>
+                <label className="flex items-center gap-2 text-[14px] text-text">
                   <input
                     type="checkbox"
                     checked={expectedBodyTextNegate}
                     onChange={(event) => setExpectedBodyTextNegate(event.target.checked)}
-                  />{' '}
+                    className="size-4 rounded border-line"
+                  />
                   Treat that body text as unexpected instead
                 </label>
               </p>
             </>
           ) : null}
-          <fieldset>
-            <legend>Credential</legend>
-            <p>
-              <label htmlFor="probe-http-credential-type">Credential type</label>
+          <fieldset className={FIELDSET}>
+            <legend className={LEGEND}>Credential</legend>
+            <p className="flex flex-col gap-1">
+              <label htmlFor="probe-http-credential-type" className={FIELD_LABEL}>
+                Credential type
+              </label>
               <select
                 id="probe-http-credential-type"
                 value={credentialType}
                 onChange={(event) => setCredentialType(event.target.value as 'none' | 'bearer' | 'basic')}
+                className={FIELD_INPUT}
               >
                 <option value="none">None</option>
                 <option value="bearer">Bearer token</option>
@@ -449,20 +512,23 @@ function ProbeForm({
               </select>
             </p>
             {credentialType === 'basic' ? (
-              <p>
-                <label htmlFor="probe-http-credential-username">Username</label>
+              <p className="flex flex-col gap-1">
+                <label htmlFor="probe-http-credential-username" className={FIELD_LABEL}>
+                  Username
+                </label>
                 <input
                   id="probe-http-credential-username"
                   required
                   value={credentialUsername}
                   onChange={(event) => setCredentialUsername(event.target.value)}
+                  className={FIELD_INPUT}
                 />
               </p>
             ) : null}
             {credentialType !== 'none' ? (
               showSecretInput ? (
-                <p>
-                  <label htmlFor="probe-http-credential-secret">
+                <p className="flex flex-col gap-1">
+                  <label htmlFor="probe-http-credential-secret" className={FIELD_LABEL}>
                     {credentialType === 'bearer' ? 'Bearer token' : 'Password'}
                   </label>
                   <input
@@ -470,26 +536,25 @@ function ProbeForm({
                     type="password"
                     value={secret}
                     onChange={(event) => setSecret(event.target.value)}
+                    className={FIELD_INPUT}
                   />
                   {hasStoredSecret ? (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplaceCredential(false)
-                          setSecret('')
-                        }}
-                      >
-                        Keep the current secret
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplaceCredential(false)
+                        setSecret('')
+                      }}
+                      className={`${BUTTON_SECONDARY} w-fit`}
+                    >
+                      Keep the current secret
+                    </button>
                   ) : null}
                 </p>
               ) : (
-                <p>
+                <p className="text-[14px] text-muted">
                   A secret is already set.{' '}
-                  <button type="button" onClick={() => setReplaceCredential(true)}>
+                  <button type="button" onClick={() => setReplaceCredential(true)} className={`${BUTTON_SECONDARY} ml-1`}>
                     Replace credential
                   </button>
                 </p>
@@ -498,36 +563,35 @@ function ProbeForm({
           </fieldset>
         </fieldset>
       ) : null}
-      <fieldset>
-        <legend>Groups</legend>
+      <fieldset className={FIELDSET}>
+        <legend className={LEGEND}>Groups</legend>
         {groups.length === 0 ? (
-          <p>
-            No groups yet. <Link to="/admin/probe-groups">Add one</Link>.
+          <p className="text-[14px] text-muted">
+            No groups yet. <Link to="/admin/probe-groups" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">Add one</Link>.
           </p>
         ) : (
           groups.map((group) => (
             <p key={group.id}>
-              <label>
+              <label className="flex items-center gap-2 text-[14px] text-text">
                 <input
                   type="checkbox"
                   checked={groupIds.includes(group.id)}
                   onChange={() => toggleGroup(group.id)}
-                />{' '}
+                  className="size-4 rounded border-line"
+                />
                 {group.name}
               </label>
             </p>
           ))
         )}
       </fieldset>
-      {mutation.isError ? (
-        <p role="alert">{problemDetail(mutation.error) ?? 'Could not save the probe. Try again.'}</p>
-      ) : null}
-      <p>
-        <button type="submit" disabled={mutation.isPending}>
+      {mutation.isError ? <p role="alert" className={ALERT}>{problemDetail(mutation.error) ?? 'Could not save the probe. Try again.'}</p> : null}
+      <p className="flex gap-2">
+        <button type="submit" disabled={mutation.isPending} className={BUTTON_PRIMARY}>
           {isEditing ? 'Save' : 'Add probe'}
-        </button>{' '}
+        </button>
         {isEditing ? (
-          <button type="button" onClick={onDoneEditing}>
+          <button type="button" onClick={onDoneEditing} className={BUTTON_SECONDARY}>
             Cancel
           </button>
         ) : null}
