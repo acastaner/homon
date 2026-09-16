@@ -2,6 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Sets [data-theme] before anything paints, so dark (the resident scheme, docs/
+         ARCHITECTURE.md §3.12) or a remembered light choice is correct from the first
+         frame. Must stay external and load ahead of every other <head> element and of
+         /src/main.tsx below — an inline script would violate the CSP's script-src 'self'
+         with no 'unsafe-inline' (nginx.conf). -->
+    <script src="/theme-bootstrap.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Homon — the household's services, links, pages, weather and calendar on one page." />

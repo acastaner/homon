@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router'
 
+import { ThemeToggle } from '@/components/theme-toggle'
 import { useMeta } from '@/lib/meta'
 import { useSession, useSignOut } from '@/lib/session'
 
@@ -40,6 +41,7 @@ export function AppShell() {
             </button>
           </p>
         ) : null}
+        <ThemeToggle />
       </header>
       <main>
         <Outlet />
