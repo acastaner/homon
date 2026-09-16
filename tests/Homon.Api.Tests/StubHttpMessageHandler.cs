@@ -32,7 +32,8 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
 /// <see cref="Homon.Infrastructure.Monitoring.HttpProbeRunner.HttpClientName"/> — the fake
 /// <see cref="IHttpClientFactory"/> the plan's test description asks for.
 /// </summary>
-internal sealed class FakeHttpClientFactory(string clientName, HttpMessageHandler handler) : IHttpClientFactory
+internal sealed class FakeHttpClientFactory(string clientName, HttpMessageHandler handler, Uri? baseAddress = null)
+    : IHttpClientFactory
 {
     public HttpClient CreateClient(string name)
     {
@@ -43,6 +44,6 @@ internal sealed class FakeHttpClientFactory(string clientName, HttpMessageHandle
 
         // disposeHandler: false — the same handler instance is asserted against after the
         // call returns, and HttpClient disposes its handler by default.
-        return new HttpClient(handler, disposeHandler: false);
+        return new HttpClient(handler, disposeHandler: false) { BaseAddress = baseAddress };
     }
 }
