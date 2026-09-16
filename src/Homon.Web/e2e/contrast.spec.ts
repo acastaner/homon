@@ -10,6 +10,17 @@ import { expect, test } from '@playwright/test'
  * about (readers, glancing, sometimes in sunlight).
  */
 test.describe('colour contrast', () => {
+  // Unconditional, not a step inside the light-scheme test itself: if that test's own
+  // expectation fails, execution never reaches a cleanup click at the end of the test body,
+  // and the browser is left on light for whatever runs next against the same storage
+  // state. afterEach still runs after a failed test, so the reset happens either way.
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(() => {
+      window.localStorage.removeItem('homon-theme')
+      delete document.documentElement.dataset.theme
+    })
+  })
+
   test('the dashboard has no color-contrast violations, dark scheme', async ({ page }) => {
     await page.goto('/')
 
@@ -27,9 +38,5 @@ test.describe('colour contrast', () => {
     const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
 
     expect(results.violations).toEqual([])
-
-    // Leave the browser back on dark — this storage state is shared with every other spec
-    // in the run.
-    await page.getByRole('button', { name: 'Switch to dark theme' }).click()
   })
 })
