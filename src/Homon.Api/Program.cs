@@ -500,9 +500,9 @@ v1.MapAuthenticationEndpoints();
 v1.MapProbeEndpoints();
 v1.MapProbeGroupEndpoints();
 v1.MapStatusEndpoints();
+v1.MapLinkEndpoints();
 
 // Module endpoints register here as each module lands — see docs/MODULES.md:
-//   v1.MapLinkEndpoints();
 //   v1.MapPageEndpoints();    v1.MapBackupEndpoints();   v1.MapApiKeyEndpoints();
 //   v1.MapWeatherEndpoints(); v1.MapCalendarEndpoints();
 
