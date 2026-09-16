@@ -16,7 +16,7 @@ reviews and merges the work.
 | 003 | DONE (2026-09-16, `b92eb30`) | M | 002 | HTTP/HTTPS probe |
 | 004 | planned | M | 002, 003 | SMB/CIFS probe (managed client) |
 | 005 | planned | S | 002, 003 | SNMP probe scaffold |
-| 006 | planned | M | — (reuses 002's ordering convention) | Links |
+| 006 | DONE (2026-09-16, `191df56`) | M | — (reuses 002's ordering convention) | Links |
 | 007 | planned | M | — | Pages and the WYSIWYG editor |
 | 008 | planned | L | — | Backup reports and API-key administration |
 | 009 | planned | L | 002, 008 | Alerts by email |
