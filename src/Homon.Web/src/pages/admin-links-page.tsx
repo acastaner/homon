@@ -122,11 +122,21 @@ function LinkForm({
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    const trimmed: LinkFields = {
+      title: fields.title.trim(),
+      url: fields.url.trim(),
+      description: fields.description.trim(),
+    }
+
+    if (trimmed.title.length === 0 || trimmed.url.length === 0) {
+      return
+    }
+
     if (editingId === null) {
-      createLink.mutate(fields, { onSuccess: () => onFieldsChange(EMPTY_FIELDS) })
+      createLink.mutate(trimmed, { onSuccess: () => onFieldsChange(EMPTY_FIELDS) })
     } else {
       updateLink.mutate(
-        { id: editingId, fields },
+        { id: editingId, fields: trimmed },
         { onSuccess: () => { onFieldsChange(EMPTY_FIELDS); onCancel() } },
       )
     }
