@@ -68,8 +68,10 @@ test.describe('dashboard grouped by ProbeGroup', () => {
     // The Services section is split into "Hosts", "Storage" and "Other" (a group exists, so
     // the ungrouped section is not called "Services" — plan 002's Decision 7); "Links" is the
     // untouched placeholder section plan 006 fills in; "Pages" is plan 007's section, present
-    // because auth.setup.ts seeds one published page ("welcome") for the whole e2e run.
-    await expect(headings).toHaveText(['Hosts', 'Storage', 'Other', 'Links', 'Pages'])
+    // because auth.setup.ts seeds one published page ("welcome") for the whole e2e run;
+    // "Weather" is plan 010's section — always present, unlike Pages, since an unconfigured
+    // location is its own empty state rather than an absent section.
+    await expect(headings).toHaveText(['Hosts', 'Storage', 'Other', 'Links', 'Pages', 'Weather'])
 
     // The shared probe belongs to both groups, so it appears once in each of their tables.
     await expect(page.getByRole('row', { name: /Shared device/ })).toHaveCount(2)
