@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Link as RouterLink } from 'react-router'
 
+import { useLinks } from '@/lib/links'
 import { dashboardSections, formatCheckedAt, useStatus } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
@@ -61,6 +63,7 @@ export function DashboardPage() {
   const sections = dashboardSections(status.data, { phone: isPhone })
   const totals = status.data?.totals
   const now = new Date()
+  const { data: links = [] } = useLinks()
 
   return (
     <>
@@ -108,7 +111,28 @@ export function DashboardPage() {
       ))}
       <section aria-labelledby="links-heading">
         <h2 id="links-heading">Links</h2>
-        <p>No links yet. An administrator adds them under Admin → Links.</p>
+        {links.length === 0 ? (
+          <p>
+            No links yet. An administrator adds them under Admin →{' '}
+            <RouterLink to="/admin/links">Links</RouterLink>
+          </p>
+        ) : (
+          <ul>
+            {links.map((link) => (
+              <li key={link.id}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${link.title} (opens in a new tab)`}
+                >
+                  {link.title}
+                </a>
+                {link.description ? <span> {link.description}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </>
   )

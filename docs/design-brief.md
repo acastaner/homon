@@ -269,7 +269,8 @@ Schedule 140px, schedule in mono `muted`. Phone folds like Services.
 
 **Links.** A panel of rows. Title is a link in `text` with a `line-strong` underline, 3px
 offset, turning `text` on hover; description in `muted` beside it on desktop, below it on
-phone. Always `target="_blank"` with `rel="noopener"`.
+phone. Always `target="_blank"` with `rel="noopener noreferrer"` (plan 006: `noopener`
+alone stops `window.opener` but not the `Referer` naming this dashboard to the linked site).
 
 **Weather.** A panel with 16px padding. A 40px `muted` condition icon, the temperature in
 mono 30px / 500, a `muted` line of condition, wind and feels-like. Then three forecast rows:
