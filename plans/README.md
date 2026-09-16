@@ -20,7 +20,7 @@ reviews and merges the work.
 | 007 | DONE (2026-09-16, `9b47556`) | M | — | Pages and the WYSIWYG editor |
 | 008 | planned | L | — | Backup reports and API-key administration |
 | 009 | planned | L | 002, 008 | Alerts by email |
-| 010 | planned | M | — | Weather widget |
+| 010 | DONE (2026-09-16, `c653799`) | M | — | Weather widget |
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
 | 012 | planned | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
