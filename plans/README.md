@@ -22,7 +22,7 @@ reviews and merges the work.
 | 009 | planned | L | 002, 008 | Alerts by email |
 | 010 | DONE (2026-09-16, `c653799`) | M | — | Weather widget |
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
-| 012 | planned | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
+| 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
@@ -67,6 +67,21 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
 
 ## Cross-plan follow-ups (not in any plan yet)
 
+- **Design details 012 deliberately simplified**, each because the alternative would have
+  broken a test the suites depend on, or exceeded "style only":
+  - the dashboard stat strip stays flat text — the brief colours the unstable and down
+    values, but wrapping each in its own element breaks `dashboard-page.test.tsx`'s
+    whole-string `getByText`, which matches only direct text children;
+  - the Services table's phone layout hides the sparkline and "Checked" columns rather than
+    folding each row into two lines, because overriding `display` on `<tr>`/`<td>` strips
+    the implicit ARIA row/cell roles the e2e specs query by. `Sparkline`'s `size="inline"`
+    variant exists but is unused;
+  - "Signed in as … / Sign out" is one always-visible block, not a responsive banner/page-header
+    pair (jsdom applies no stylesheet, so two copies both resolve and `getByRole` throws);
+  - the banner's "refreshed N s ago" timestamp is not wired — `Status.generatedAt` exists,
+    but polling it from `AppShell` would add a fetch to every route including sign-in;
+  - shadcn's `src/components/ui/*` primitives are installed and committed but unused; the
+    pages hand-style native controls. A later plan can adopt them.
 - **Tap targets (for 012).** The design brief asks for controls ≥40px, but nothing asserts
   it: native unstyled checkboxes are 13×13 and selects 24px tall before the design pass, so
   plan 003's e2e probe-form test deliberately checks only horizontal overflow. When 012
