@@ -252,6 +252,52 @@ with no observations at all, and reconciling both into one duration-weighted fig
 real complexity for a number the brief only asks to be "computed over the retained
 observation window."
 
+### 3.17 Probe secrets share one encrypted-at-rest seam; per-kind options are one jsonb column each
+
+Plan 003 (HTTP) is the first probe kind to carry options beyond `Host`, and the first to
+carry a secret — the pattern set here is binding on 004 (SMB) and 005 (SNMP), which reuse
+it by name rather than inventing their own.
+
+**Per-kind options.** `Probe` gains one nullable owned-type property per kind (`HttpOptions`
+for `Http`, `SmbOptions`/`SnmpOptions` when 004/005 land), each mapped with EF Core's
+`OwnsOne(...).ToJson()` to its own `jsonb` column — additive to `AddMonitoring`'s migration,
+never a reshape of it. *Rejected*: a separate table per kind (every probe-list read needs a
+conditional join per kind, and a new kind becomes a migration touching the shared read
+path); one kind-agnostic jsonb blob (loses compile-time field names, mixes every kind's
+validation together); flat nullable scalar columns prefixed by kind (four kinds × ~6 fields
+is 20+ mostly-null columns with no natural home for negation flags).
+
+**Secrets.** `Homon.Infrastructure.Security.ISecretProtector`, backed by ASP.NET Data
+Protection (`DataProtectionSecretProtector`), is the one seam every probe secret Homon ever
+stores goes through — the HTTP bearer token or basic-auth password today, the SMB password
+and calendar credentials later — under a single purpose string (`"Homon.Secrets.v1"`), not
+one per kind, so a key-ring export/import covers every stored secret together. The key ring
+is the `dataprotection-keys` volume in production (`docs/MODULES.md`); losing it means
+every `Unprotect()` throws `CryptographicException`, which a runner catches and turns into
+a failed observation ("credentials unreadable — re-enter them") — it must never reach the
+scheduler as an unhandled exception.
+
+**Wire semantics are write-only.** A probe response never carries a secret, only a derived
+`hasSecret: bool`. On write, the credential's `secret` field is absent/null → keep the
+stored value; `""` → clear it; non-empty → encrypt and replace. Setting the credential's
+type to "none" clears any stored secret regardless of what else is sent. The admin form
+never pre-fills a secret field; editing a probe with one already set shows that a secret
+exists and offers a "Replace credential" affordance rather than an editable field seeded
+from nothing.
+
+**`IDataProtectionProvider` is not free everywhere `Homon.Api` runs.** ASP.NET Core's
+`WebApplication.CreateBuilder` host registers Data Protection's defaults implicitly, but
+`Program.cs`'s CLI verbs (`migrate`, `hash-password`, `create-api-key`) build a *different*,
+plain `Host.CreateApplicationBuilder` host (`CommandHost`) that does not — so
+`AddDataProtection()` is called unconditionally in both hosts, not only inside the
+`DataProtection:KeyRingPath` branch that only ever governs *where* keys persist.
+
+*Rejected*: a second `IDataProtectionProvider` purpose per kind — the whole point of one
+key ring is that losing it is one incident, not N; skipping secret protection for
+command-line verbs — `ISecretProtector` is registered unconditionally in
+`AddHomonMonitoring`, so every host that resolves the DI container needs the provider
+available, not only the one that serves HTTP traffic.
+
 ## 4. Things this record does not yet decide
 
 The WYSIWYG editor, the weather and calendar providers. Each is a module plan's decision

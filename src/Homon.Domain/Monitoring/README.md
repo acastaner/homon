@@ -2,8 +2,9 @@
 
 Everything about *is this thing up*: the probes an administrator configures, what each poll
 observed, the state each service is in right now, and the named groups probes are arranged
-into on the dashboard. Landed by plan 002 (core, groups, the ping probe); 003–005 add the
-HTTP, SMB and SNMP runners on top of the same model.
+into on the dashboard. Landed by plan 002 (core, groups, the ping probe) and plan 003 (the
+HTTP runner and the shared secret-protector seam); 004–005 add the SMB and SNMP runners on
+top of the same model.
 
 ## Entities (this folder)
 
@@ -31,37 +32,55 @@ HTTP, SMB and SNMP runners on top of the same model.
   "Other" otherwise). Flat — groups do not nest. Deleting a group removes its memberships and
   leaves the probes alone; deleting a probe removes it from every group. An empty group is
   left out of the dashboard's status payload.
+- `HttpProbeOptions` / `HttpCredential` — plan 003's per-kind options for `ProbeKind.Http`,
+  owned by `Probe.HttpOptions` (null for every other kind). Method (HEAD/GET only this
+  phase), path, TLS opt-out, a per-probe timeout (`TimeoutSeconds`, 1–25s, `HttpClient`'s
+  own `Timeout` is not used because the client is shared across every HTTP probe), expected
+  status/body (each negatable), and a credential (none/bearer/basic) whose secret is never
+  stored in the clear — see `Homon.Infrastructure/Security/ISecretProtector.cs`.
 
 ## Where the rest lives
 
 - `Homon.Infrastructure/Monitoring/` — `IProbeRunner` (one per kind) and `ProbeResult`;
   `IIcmpPinger`/`SystemIcmpPinger`/`PingProbeRunner` (the ping runner, behind a fake-able
-  seam so no test ever sends real ICMP); `ProbeScheduler` (one tick-based `BackgroundService`
-  that scans for due probes and dispatches polls under a bounded-concurrency gate, rather
-  than a per-probe timer); `ProbeObservationRetentionService` (an hourly sweep that deletes
-  observations older than the retention window); `ProbeUptimeCalculator`; `MonitoringOptions`
-  (the tick interval, concurrency limit, per-poll timeout, retention window, sparkline bucket
-  count — all environment-configurable, none admin-UI configurable yet).
+  seam so no test ever sends real ICMP); `HttpProbeRunner` (plan 003 — one named `HttpClient`
+  shared by every HTTP probe, redirects on, per-request TLS opt-out, evaluates status then
+  body, maps every failure mode — timeout, connection, TLS, unreadable credentials — to its
+  own `Detail` sentence); `ProbeScheduler` (one tick-based `BackgroundService` that scans for
+  due probes and dispatches polls under a bounded-concurrency gate, rather than a per-probe
+  timer); `ProbeObservationRetentionService` (an hourly sweep that deletes observations older
+  than the retention window); `ProbeUptimeCalculator`; `MonitoringOptions` (the tick
+  interval, concurrency limit, per-poll timeout, retention window, sparkline bucket count —
+  all environment-configurable, none admin-UI configurable yet).
+- `Homon.Infrastructure/Security/` — `ISecretProtector`/`DataProtectionSecretProtector`
+  (plan 003), the one seam every probe secret is encrypted and decrypted through.
 - `Homon.Infrastructure/Persistence/Configurations/` — one `IEntityTypeConfiguration<T>` per
   entity above. `ProbeKind`/`ProbeStatus` map to `varchar` (`HasConversion<string>()`), not
   the default `int` — readable in `psql`, immune to a later member reordering the enum.
-- `Homon.Api/Endpoints/ProbeEndpoints.cs` — admin CRUD, pause and reorder under `/probes`.
-  `GET` admits an Administrator session or a valid, unexpired API key of either scope; every
-  write stays Administrator-session-only. `ProbeGroupEndpoints.cs` — CRUD, reorder and
-  membership under `/probe-groups`, `Reader`-gated for `GET`. `StatusEndpoints.cs` —
-  `GET /status`, the dashboard's read model: totals, every probe, non-empty groups, the
-  ungrouped ids.
+- `Homon.Api/Endpoints/ProbeEndpoints.cs` — admin CRUD, pause and reorder under `/probes`,
+  including `kind: "http"` and its `http` options object (plan 003). `GET` admits an
+  Administrator session or a valid, unexpired API key of either scope; every write stays
+  Administrator-session-only. `ProbeGroupEndpoints.cs` — CRUD, reorder and membership under
+  `/probe-groups`, `Reader`-gated for `GET`. `StatusEndpoints.cs` — `GET /status`, the
+  dashboard's read model: totals, every probe, non-empty groups, the ungrouped ids.
 - `Homon.Web/src/pages/admin-probes-page.tsx` and `admin-probe-groups-page.tsx` — the admin
-  forms. `Homon.Web/src/pages/dashboard-page.tsx` — the grouped Services section and the stat
-  strip. `Homon.Web/src/lib/{probes,probe-groups,status}.ts` — the data layer.
+  forms. The probe form's `Kind` field is a real, changeable `<select>` only on create
+  (`ping`/`http` today); once created it renders as static text — kind is immutable, and
+  `ProbeEndpoints` ignores it on `PUT`. Its per-kind fieldset region (plan 003, extended by
+  004/005 the same way) renders only the fields the selected kind needs; the HTTP fieldset's
+  credential section never pre-fills a stored secret, offering a "Replace credential"
+  affordance instead. `Homon.Web/src/pages/dashboard-page.tsx` — the grouped Services section
+  and the stat strip. `Homon.Web/src/lib/{probes,probe-groups,status}.ts` — the data layer.
 
 ## Per-kind options (003–005)
 
 `Probe` carries no per-kind options column from plan 002 — `Ping` needs none, only `Host`
-and the shared fields. Each later plan adds its own nullable owned-type property (e.g.
-`HttpProbeOptions? HttpOptions`) mapped with `OwnsOne(...).ToJson()` — additive to the
-`AddMonitoring` migration, never a reshape of it. Secrets a probe carries (SMB password, HTTP
-bearer token) are held encrypted, never in clear — see 003's secret-protector decision.
+and the shared fields. Each later plan adds its own nullable owned-type property — plan
+003's `HttpProbeOptions? HttpOptions` is the first, `SmbProbeOptions`/`SnmpProbeOptions` are
+004/005's — mapped with `OwnsOne(...).ToJson()` — additive to the `AddMonitoring` migration,
+never a reshape of it. Secrets a probe carries (SMB password, HTTP bearer token) are held
+encrypted, never in clear, through the shared `ISecretProtector` seam plan 003 adds (see
+`docs/ARCHITECTURE.md` §3.17) — one purpose string for every kind, not one per kind.
 
 ## Known constraints
 

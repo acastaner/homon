@@ -28,6 +28,9 @@ window; older samples are dropped from the database. SMB requires credentials an
 target. HTTP requires a method (HEAD, GET, …), a URI (`api/health`), an optional matching
 text and/or status code (each negatable), and optional credentials (bearer key, basic auth)
 compatible with the existing services' API requirements. Admins add/edit/delete probes.
+*(HTTP built: plan 003 — `HttpProbeOptions`/`HttpCredential`, method restricted to HEAD/GET
+this phase; with no status configured only a 2xx response counts as success. See
+`docs/ARCHITECTURE.md` §3.17.)*
 
 **Links.** URL, title, optional description; always open in a new tab; admin CRUD.
 
@@ -69,7 +72,10 @@ implement `GET` of one OID only in the first phase.
 
 **Probe secrets** (SMB password, HTTP bearer) are stored encrypted with ASP.NET Data
 Protection. The key ring is the `dataprotection-keys` volume in production; losing it means
-re-entering every secret, which is why the runbook says how to export it.
+re-entering every secret, which is why the runbook says how to export it. *(Built: plan
+003 — `Homon.Infrastructure.Security.ISecretProtector`/`DataProtectionSecretProtector`,
+one purpose string for every probe secret, write-only wire semantics on every endpoint
+that carries one. See `docs/ARCHITECTURE.md` §3.17.)*
 
 **Uptime** is computed over the retained observation window and shown with two decimals;
 a probe with no observations shows `—`, not `100.00%`. *(Built: plan 002, Decision 5 —
