@@ -180,6 +180,20 @@ static HostApplicationBuilder CommandHost(string[] args)
 
     host.Services.AddHomonInfrastructure(host.Configuration);
 
+    // Plan 003's Decision 3 assumed IDataProtectionProvider resolves unconditionally once
+    // *the host* is built, because Homon.Api's Microsoft.NET.Sdk.Web project carries a
+    // FrameworkReference to Microsoft.AspNetCore.App. True for WebApplication.CreateBuilder
+    // below, but this command host is a plain Host.CreateApplicationBuilder — the generic
+    // host does not pre-register Data Protection the way the web host does, so
+    // ISecretProtector (consumed unconditionally by AddHomonMonitoring's HttpProbeRunner
+    // registration) fails ServiceProvider validation the moment any command builds this
+    // host, `migrate` included. Registered here, unconditionally, same posture as the web
+    // host's own registration below — this is the plan's own documented STOP-condition
+    // remedy (plan 003), not a workaround: it keeps every probe secret's key ring on the
+    // same footing regardless of which host reads it, rather than skipping secret
+    // protection for command-line verbs.
+    host.Services.AddDataProtection();
+
     return host;
 }
 
@@ -220,6 +234,12 @@ builder.Services.AddHomonInfrastructure(builder.Configuration, builder.Environme
 // a container, where replacing the API would invalidate every signed-in session and every
 // stored secret. Configured only when a path is supplied, so tests and `dotnet run` keep the
 // default and write nothing into the repository.
+
+// Unconditional — see CommandHost's own AddDataProtection() call above for why this cannot
+// stay inside the branch below (plan 003's Decision 3 assumed it could; `migrate` proved
+// otherwise). The branch below only ever adds *where* keys persist, never *whether* the
+// provider exists.
+builder.Services.AddDataProtection();
 
 var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
 

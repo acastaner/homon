@@ -15,6 +15,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <!--
+      IDataProtectionProvider (plan 003's ISecretProtector). See Directory.Packages.props for
+      why this project needs it declared explicitly.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" />
     <!-- IDesignTimeDbContextFactory lives here; design-time only, never shipped. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
@@ -22,6 +27,11 @@
     </PackageReference>
     <!-- Read by the design-time factory so `dotnet ef` shares the API's connection string. -->
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <!--
+      AddHttpClient (plan 003's HttpProbeRunner named client). See Directory.Packages.props
+      for why this project needs it declared explicitly.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
     <!--
       This project uses plain Microsoft.NET.Sdk, not Microsoft.NET.Sdk.Web (that is
       Homon.Api.csproj only), so it gets no FrameworkReference to Microsoft.AspNetCore.App —

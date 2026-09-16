@@ -43,5 +43,18 @@ internal sealed class ProbeConfiguration : IEntityTypeConfiguration<Probe>
         // non-deferrable unique constraint row by row, so swapping two positions inside one
         // transaction would fail partway through. Position is a sort key, not a dense index —
         // see plan 002's Decision 7.
+
+        // One nullable owned type per kind, mapped to its own jsonb column — plan 003's
+        // Decision 1. *Rejected*: a separate table per kind — every probe-list read needs a
+        // conditional join per kind, and a new kind is a migration touching the shared read
+        // path; a single kind-agnostic jsonb blob — loses compile-time field names and mixes
+        // each kind's validation together; flat nullable scalar columns prefixed by kind —
+        // four kinds x ~6 fields is 20+ mostly-null columns with no natural home for negation
+        // flags. 004 (SMB) and 005 (SNMP) copy this same shape by name.
+        builder.OwnsOne(p => p.HttpOptions, http =>
+        {
+            http.ToJson();
+            http.OwnsOne(o => o.Credential);
+        });
     }
 }

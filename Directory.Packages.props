@@ -13,6 +13,13 @@
   <ItemGroup Label="ASP.NET Core">
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+    <!--
+      Homon.Infrastructure targets plain Microsoft.NET.Sdk, not Microsoft.NET.Sdk.Web, so
+      unlike Homon.Api it gets no FrameworkReference to Microsoft.AspNetCore.App —
+      IDataProtectionProvider (plan 003's ISecretProtector) would not otherwise resolve as a
+      type inside this project.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup Label="Configuration and options">
@@ -20,6 +27,12 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
+    <!--
+      AddHttpClient (plan 003's HttpProbeRunner). Reaches Homon.Infrastructure today only as
+      an undeclared transitive dependency of the Resend package, pinned at 8.0.0 there — add
+      it directly at this repo's own version rather than relying on that.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup Label="Data access">

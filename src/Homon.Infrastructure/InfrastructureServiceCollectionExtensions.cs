@@ -1,7 +1,9 @@
+using System.Net.Security;
 using Homon.Infrastructure.Administration;
 using Homon.Infrastructure.Email;
 using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Persistence;
+using Homon.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -147,6 +149,28 @@ public static class InfrastructureServiceCollectionExtensions
         // which lifetime a given kind picked.
         services.AddSingleton<IIcmpPinger, SystemIcmpPinger>();
         services.AddScoped<IProbeRunner, PingProbeRunner>();
+
+        // Unconditional: IDataProtectionProvider resolves once the host is built regardless
+        // of whether DataProtection:KeyRingPath is configured (that setting only controls
+        // *where* keys persist — Program.cs' AddDataProtection().PersistKeysToFileSystem(...)
+        // call is conditional on it, but Homon.Api's Microsoft.NET.Sdk.Web hosting defaults
+        // register the provider itself unconditionally). See plan 003's Decision 3.
+        services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
+
+        // One named client, redirects on, TLS opt-out per-request via HttpRequestOptions —
+        // not a second client. *Rejected*: two named clients (strict/permissive) — doubles
+        // every non-TLS setting for no benefit once the callback can read a per-request flag.
+        // See plan 003's Decision 4.
+        services.AddHttpClient(HttpProbeRunner.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                ServerCertificateCustomValidationCallback = (request, _, _, errors) =>
+                    errors == SslPolicyErrors.None
+                    || (request.Options.TryGetValue(HttpProbeRunner.IgnoreCertificateErrorsOption, out var ignore)
+                        && ignore),
+            });
+        services.AddScoped<IProbeRunner, HttpProbeRunner>();
 
         services.AddHostedService<ProbeScheduler>();
         services.AddHostedService<ProbeObservationRetentionService>();

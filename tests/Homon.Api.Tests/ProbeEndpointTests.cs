@@ -95,8 +95,67 @@ public class ProbeEndpointTests(ApiDatabaseFactory factory) : IClassFixture<ApiD
         yield return [new { name = "n", host = "h.test", kind = "ping", pollIntervalSeconds = Probe.MaxPollIntervalSeconds + 1, failureThreshold = 2 }, "pollIntervalSeconds"];
         yield return [new { name = "n", host = "h.test", kind = "ping", pollIntervalSeconds = 30, failureThreshold = Probe.MinFailureThreshold - 1 }, "failureThreshold"];
         yield return [new { name = "n", host = "h.test", kind = "ping", pollIntervalSeconds = 30, failureThreshold = Probe.MaxFailureThreshold + 1 }, "failureThreshold"];
-        yield return [new { name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2 }, "kind"];
+        yield return [new { name = "n", host = "h.test", kind = "smb", pollIntervalSeconds = 30, failureThreshold = 2 }, "kind"];
+        yield return [new { name = "n", host = "h.test", kind = "snmp", pollIntervalSeconds = 30, failureThreshold = 2 }, "kind"];
         yield return [new { name = "n", host = "h.test", kind = "ping", pollIntervalSeconds = 30, failureThreshold = 2, groupIds = new[] { Guid.NewGuid() } }, "groupIds"];
+
+        // kind == "http" is accepted from plan 003 on (Step 5's lift of 002's rejection) —
+        // these are the http-object shaped 400s that replace the old "kind" rejection case.
+        yield return [new { name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2 }, "http"];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "ping", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "get", path = "api/health" },
+            },
+            "http",
+        ];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "head", path = "api/health", expectedBodyText = "ok" },
+            },
+            "http.expectedBodyText",
+        ];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "get", path = "http://evil.test/api" },
+            },
+            "http.path",
+        ];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "get", path = "api/health", credential = new { type = "basic" } },
+            },
+            "http.credential.username",
+        ];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "get", path = "api/health", timeoutSeconds = 0 },
+            },
+            "http.timeoutSeconds",
+        ];
+        yield return
+        [
+            new
+            {
+                name = "n", host = "h.test", kind = "http", pollIntervalSeconds = 30, failureThreshold = 2,
+                http = new { method = "get", path = "api/health", timeoutSeconds = 26 },
+            },
+            "http.timeoutSeconds",
+        ];
     }
 
     [DatabaseFact]
@@ -276,6 +335,109 @@ public class ProbeEndpointTests(ApiDatabaseFactory factory) : IClassFixture<ApiD
             Assert.Equal(0, memberships.Single(m => m.ProbeId == firstId).Position);
             Assert.Equal(1, memberships.Single(m => m.ProbeId == secondId).Position);
         }
+    }
+
+    [DatabaseFact]
+    public async Task POST_creates_an_http_probe_and_round_trips_its_options()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var response = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = "API",
+            host = "api.test",
+            kind = "http",
+            pollIntervalSeconds = 30,
+            failureThreshold = 2,
+            http = new
+            {
+                method = "get",
+                path = "api/health",
+                useHttps = true,
+                expectedStatusCode = 200,
+                expectedBodyText = "ok",
+            },
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("http", body.GetProperty("kind").GetString());
+        var http = body.GetProperty("http");
+        Assert.Equal("get", http.GetProperty("method").GetString());
+        Assert.Equal("api/health", http.GetProperty("path").GetString());
+        Assert.True(http.GetProperty("useHttps").GetBoolean());
+        // Omitted on create defaults to HttpProbeOptions.DefaultTimeoutSeconds (plan 003's
+        // Decision 4a) — asserted against the domain constant rather than a bare "10" so this
+        // test cannot silently drift from that constant.
+        Assert.Equal(10, http.GetProperty("timeoutSeconds").GetInt32());
+        Assert.Equal(200, http.GetProperty("expectedStatusCode").GetInt32());
+        Assert.Equal("ok", http.GetProperty("expectedBodyText").GetString());
+        Assert.Equal("none", http.GetProperty("credential").GetProperty("type").GetString());
+        Assert.False(http.GetProperty("credential").GetProperty("hasSecret").GetBoolean());
+    }
+
+    [DatabaseFact]
+    public async Task PUT_on_an_http_probe_keeps_timeoutSeconds_and_secret_when_omitted_and_clears_the_secret_on_an_empty_string()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var created = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = "Secured",
+            host = "secured.test",
+            kind = "http",
+            pollIntervalSeconds = 30,
+            failureThreshold = 2,
+            http = new
+            {
+                method = "get",
+                path = "api/health",
+                timeoutSeconds = 20,
+                credential = new { type = "bearer", secret = "super-secret-token" },
+            },
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var createdRaw = await created.Content.ReadAsStringAsync();
+        // Never plaintext, never the raw secret, anywhere in the response — only hasSecret.
+        Assert.DoesNotContain("super-secret-token", createdRaw, StringComparison.Ordinal);
+        var createdBody = JsonSerializer.Deserialize<JsonElement>(createdRaw);
+        var id = createdBody.GetProperty("id").GetGuid();
+        Assert.True(createdBody.GetProperty("http").GetProperty("credential").GetProperty("hasSecret").GetBoolean());
+
+        // Omitting timeoutSeconds and credential.secret keeps both.
+        var keepResponse = await client.PutAsJsonAsync($"/api/v1/probes/{id}", new
+        {
+            name = "Secured",
+            host = "secured.test",
+            pollIntervalSeconds = 30,
+            failureThreshold = 2,
+            http = new { method = "get", path = "api/health", credential = new { type = "bearer" } },
+        });
+        Assert.Equal(HttpStatusCode.OK, keepResponse.StatusCode);
+        var keepBody = await keepResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(20, keepBody.GetProperty("http").GetProperty("timeoutSeconds").GetInt32());
+        Assert.True(keepBody.GetProperty("http").GetProperty("credential").GetProperty("hasSecret").GetBoolean());
+
+        // credential.secret: "" clears it.
+        var clearResponse = await client.PutAsJsonAsync($"/api/v1/probes/{id}", new
+        {
+            name = "Secured",
+            host = "secured.test",
+            pollIntervalSeconds = 30,
+            failureThreshold = 2,
+            http = new { method = "get", path = "api/health", credential = new { type = "bearer", secret = "" } },
+        });
+        Assert.Equal(HttpStatusCode.OK, clearResponse.StatusCode);
+        var clearBody = await clearResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(clearBody.GetProperty("http").GetProperty("credential").GetProperty("hasSecret").GetBoolean());
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+        var probe = await database.Probes.SingleAsync(p => p.Id == id);
+        Assert.Null(probe.HttpOptions!.Credential.ProtectedSecret);
     }
 
     [DatabaseFact]

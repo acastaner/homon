@@ -1,6 +1,7 @@
 using Homon.Api.Authentication;
 using Homon.Domain.Monitoring;
 using Homon.Infrastructure.Persistence;
+using Homon.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -97,7 +98,7 @@ internal static class ProbeEndpoints
     }
 
     private static async Task<Results<Created<ProbeResponse>, ValidationProblem>> CreateProbeAsync(
-        ProbeRequest request, HomonDbContext database, CancellationToken cancellationToken)
+        ProbeRequest request, HomonDbContext database, ISecretProtector secretProtector, CancellationToken cancellationToken)
     {
         var fieldsError = ValidateFields(request, requireFailureThreshold: false, out var name, out var host,
             out var pollIntervalSeconds, out var failureThreshold);
@@ -106,10 +107,17 @@ internal static class ProbeEndpoints
             return fieldsError;
         }
 
-        var kindError = ValidateKind(request.Kind);
+        var kindError = ValidateKind(request.Kind, out var kind);
         if (kindError is not null)
         {
             return kindError;
+        }
+
+        var httpOptionsError = ValidateHttpOptions(
+            secretProtector, kind, request.Http, existing: null, out var httpOptions);
+        if (httpOptionsError is not null)
+        {
+            return httpOptionsError;
         }
 
         var groupIds = (request.GroupIds ?? []).Distinct().ToArray();
@@ -128,11 +136,12 @@ internal static class ProbeEndpoints
             Id = Guid.NewGuid(),
             Name = name,
             Host = host,
-            Kind = ProbeKind.Ping,
+            Kind = kind,
             PollInterval = TimeSpan.FromSeconds(pollIntervalSeconds),
             FailureThreshold = failureThreshold,
             Position = (maxPosition ?? -1) + 1,
             Status = ProbeStatus.Unknown,
+            HttpOptions = httpOptions,
         };
 
         database.Probes.Add(probe);
@@ -147,7 +156,8 @@ internal static class ProbeEndpoints
     }
 
     private static async Task<Results<Ok<ProbeResponse>, ValidationProblem, NotFound>> UpdateProbeAsync(
-        Guid id, ProbeRequest request, HomonDbContext database, CancellationToken cancellationToken)
+        Guid id, ProbeRequest request, HomonDbContext database, ISecretProtector secretProtector,
+        CancellationToken cancellationToken)
     {
         var probe = await database.Probes.FindAsync([id], cancellationToken);
 
@@ -163,6 +173,15 @@ internal static class ProbeEndpoints
             return fieldsError;
         }
 
+        // Kind is immutable — probe.Kind (not request.Kind, which PUT otherwise ignores)
+        // governs whether the http object is required or forbidden here.
+        var httpOptionsError = ValidateHttpOptions(
+            secretProtector, probe.Kind, request.Http, probe.HttpOptions, out var httpOptions);
+        if (httpOptionsError is not null)
+        {
+            return httpOptionsError;
+        }
+
         var groupIds = (request.GroupIds ?? []).Distinct().ToArray();
         var groupsError = await ValidateGroupIdsAsync(database, groupIds, cancellationToken);
         if (groupsError is not null)
@@ -174,6 +193,7 @@ internal static class ProbeEndpoints
         probe.Host = host;
         probe.PollInterval = TimeSpan.FromSeconds(pollIntervalSeconds);
         probe.ChangeFailureThreshold(failureThreshold);
+        probe.HttpOptions = httpOptions;
         // Kind and Position are untouched — Kind is immutable after creation, Position is
         // governed only by ReorderProbesAsync.
 
@@ -349,20 +369,197 @@ internal static class ProbeEndpoints
         return errors.Count > 0 ? TypedResults.ValidationProblem(errors) : null;
     }
 
-    private static ValidationProblem? ValidateKind(string? kind)
+    private static ValidationProblem? ValidateKind(string? kind, out ProbeKind parsedKind)
     {
         var trimmed = kind?.Trim();
 
         if (string.Equals(trimmed, "ping", StringComparison.OrdinalIgnoreCase))
         {
+            parsedKind = ProbeKind.Ping;
             return null;
         }
 
-        var detail = trimmed is "http" or "smb" or "snmp"
+        if (string.Equals(trimmed, "http", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedKind = ProbeKind.Http;
+            return null;
+        }
+
+        parsedKind = default;
+
+        // "smb"/"snmp" ship with plans 004/005, not this session — still rejected, but with
+        // their own detail rather than the generic "must be" message.
+        var detail = trimmed is "smb" or "snmp"
             ? $"Probe kind '{trimmed}' ships with a later plan and is not accepted yet."
-            : "Probe kind must be 'ping'.";
+            : "Probe kind must be 'ping' or 'http'.";
 
         return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["kind"] = [detail] });
+    }
+
+    /// <summary>
+    /// Validates <paramref name="request"/> against <paramref name="kind"/> and builds the
+    /// <see cref="HttpProbeOptions"/> to store, or returns why it could not. <paramref
+    /// name="existing"/> is the probe's current options (null on create, or when the probe is
+    /// not <see cref="ProbeKind.Http"/>) — consulted only for the two "absent = keep" fields
+    /// (<see cref="HttpProbeOptions.TimeoutSeconds"/> and the credential secret; plan 003's
+    /// Decision 2 and 4a). Every other field is a full value on every write, the same
+    /// convention <c>ValidateFields</c> already uses for the probe's own fields.
+    /// </summary>
+    private static ValidationProblem? ValidateHttpOptions(
+        ISecretProtector secretProtector,
+        ProbeKind kind,
+        HttpProbeOptionsRequest? request,
+        HttpProbeOptions? existing,
+        out HttpProbeOptions? httpOptions)
+    {
+        httpOptions = null;
+
+        if (kind != ProbeKind.Http)
+        {
+            return request is null
+                ? null
+                : TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["http"] = ["The http object is only accepted when kind is 'http'."],
+                });
+        }
+
+        if (request is null)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["http"] = ["The http object is required when kind is 'http'."],
+            });
+        }
+
+        var errors = new Dictionary<string, string[]>();
+
+        var method = ParseMethod(request.Method);
+        if (method is null)
+        {
+            errors["http.method"] = ["Method must be 'head' or 'get'."];
+        }
+
+        var path = request.Path?.Trim() ?? string.Empty;
+        if (path.Length == 0)
+        {
+            errors["http.path"] = ["Path is required."];
+        }
+        else if (path.Contains("://", StringComparison.Ordinal))
+        {
+            errors["http.path"] = ["Path must not contain a scheme."];
+        }
+
+        var expectedBodyText = string.IsNullOrEmpty(request.ExpectedBodyText) ? null : request.ExpectedBodyText;
+        if (method == HttpProbeMethod.Head && expectedBodyText is not null)
+        {
+            errors["http.expectedBodyText"] = ["A HEAD probe cannot check the response body — it has none."];
+        }
+
+        // Omitted keeps the probe's current value on update (null `existing` on create falls
+        // through to the domain default) — the same "absent = keep" rule the secret uses.
+        var timeoutSeconds = request.TimeoutSeconds ?? existing?.TimeoutSeconds ?? HttpProbeOptions.DefaultTimeoutSeconds;
+        if (request.TimeoutSeconds is { } requestedTimeout
+            && (requestedTimeout < HttpProbeOptions.MinTimeoutSeconds || requestedTimeout > HttpProbeOptions.MaxTimeoutSeconds))
+        {
+            errors["http.timeoutSeconds"] =
+                [$"Timeout must be between {HttpProbeOptions.MinTimeoutSeconds} and {HttpProbeOptions.MaxTimeoutSeconds} seconds."];
+        }
+
+        HttpCredentialType credentialType = HttpCredentialType.None;
+        if (request.Credential is not null)
+        {
+            var parsedCredentialType = ParseCredentialType(request.Credential.Type);
+            if (parsedCredentialType is null)
+            {
+                errors["http.credential.type"] = ["Credential type must be 'none', 'bearer' or 'basic'."];
+            }
+            else
+            {
+                credentialType = parsedCredentialType.Value;
+            }
+        }
+
+        var username = request.Credential?.Username?.Trim();
+        if (credentialType == HttpCredentialType.Basic && string.IsNullOrEmpty(username))
+        {
+            errors["http.credential.username"] = ["Username is required for basic auth."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        // credential.type == "none" clears any stored secret regardless of what else was
+        // sent (plan 003's Decision 2's write-only wire semantics).
+        var protectedSecret = credentialType == HttpCredentialType.None
+            ? null
+            : ResolveProtectedSecret(secretProtector, request.Credential?.Secret, existing?.Credential?.ProtectedSecret);
+
+        httpOptions = new HttpProbeOptions
+        {
+            Method = method!.Value,
+            Path = path.TrimStart('/'),
+            UseHttps = request.UseHttps ?? false,
+            IgnoreCertificateErrors = request.IgnoreCertificateErrors ?? false,
+            TimeoutSeconds = timeoutSeconds,
+            ExpectedStatusCode = request.ExpectedStatusCode,
+            ExpectedStatusCodeNegate = request.ExpectedStatusCodeNegate ?? false,
+            ExpectedBodyText = expectedBodyText,
+            ExpectedBodyTextNegate = request.ExpectedBodyTextNegate ?? false,
+            Credential = new HttpCredential
+            {
+                Type = credentialType,
+                Username = credentialType == HttpCredentialType.Basic ? username : null,
+                ProtectedSecret = protectedSecret,
+            },
+        };
+
+        return null;
+    }
+
+    /// <summary>
+    /// The write-only credential secret rule (plan 003's Decision 2): absent/null keeps the
+    /// stored value, <c>""</c> clears it, non-empty is protected and replaces it.
+    /// </summary>
+    private static string? ResolveProtectedSecret(ISecretProtector secretProtector, string? secret, string? existingProtectedSecret)
+    {
+        if (secret is null)
+        {
+            return existingProtectedSecret;
+        }
+
+        return secret.Length == 0 ? null : secretProtector.Protect(secret);
+    }
+
+    private static HttpProbeMethod? ParseMethod(string? method)
+    {
+        var trimmed = method?.Trim();
+
+        if (string.Equals(trimmed, "head", StringComparison.OrdinalIgnoreCase))
+        {
+            return HttpProbeMethod.Head;
+        }
+
+        return string.Equals(trimmed, "get", StringComparison.OrdinalIgnoreCase) ? HttpProbeMethod.Get : null;
+    }
+
+    private static HttpCredentialType? ParseCredentialType(string? type)
+    {
+        var trimmed = type?.Trim();
+
+        if (string.IsNullOrEmpty(trimmed) || string.Equals(trimmed, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return HttpCredentialType.None;
+        }
+
+        if (string.Equals(trimmed, "bearer", StringComparison.OrdinalIgnoreCase))
+        {
+            return HttpCredentialType.Bearer;
+        }
+
+        return string.Equals(trimmed, "basic", StringComparison.OrdinalIgnoreCase) ? HttpCredentialType.Basic : null;
     }
 
     private static async Task<ValidationProblem?> ValidateGroupIdsAsync(
@@ -429,13 +626,34 @@ internal static class ProbeEndpoints
             probe.Status,
             probe.LastDetail,
             probe.LastObservedAt,
-            groupIds);
+            groupIds,
+            ToHttpResponse(probe.HttpOptions));
+
+    private static HttpProbeOptionsResponse? ToHttpResponse(HttpProbeOptions? options) =>
+        options is null
+            ? null
+            : new HttpProbeOptionsResponse(
+                options.Method,
+                options.Path,
+                options.UseHttps,
+                options.IgnoreCertificateErrors,
+                options.TimeoutSeconds,
+                options.ExpectedStatusCode,
+                options.ExpectedStatusCodeNegate,
+                options.ExpectedBodyText,
+                options.ExpectedBodyTextNegate,
+                new HttpCredentialResponse(
+                    options.Credential.Type,
+                    options.Credential.Username,
+                    // Never the value itself — ProtectedSecret is never read into a response
+                    // DTO anywhere in this file. See plan 003's Decision 2.
+                    options.Credential.ProtectedSecret is not null));
 
     /// <param name="Name">The probe's display name.</param>
     /// <param name="Host">A bare hostname or IP — no scheme, no path.</param>
     /// <param name="Kind">
-    /// Only <c>"ping"</c> is accepted today. Ignored on <c>PUT</c> — a probe's kind cannot
-    /// change after creation.
+    /// <c>"ping"</c> or <c>"http"</c>. Ignored on <c>PUT</c> — a probe's kind cannot change
+    /// after creation.
     /// </param>
     /// <param name="PollIntervalSeconds">How often the probe is polled, in seconds.</param>
     /// <param name="FailureThreshold">
@@ -444,13 +662,55 @@ internal static class ProbeEndpoints
     /// <c>PUT</c>.
     /// </param>
     /// <param name="GroupIds">Every <see cref="ProbeGroup"/> this probe should belong to.</param>
+    /// <param name="Http">
+    /// Required when <c>kind</c> (create) or the probe's stored kind (update) is <c>"http"</c>;
+    /// must be absent otherwise.
+    /// </param>
     internal sealed record ProbeRequest(
         string? Name,
         string? Host,
         string? Kind,
         int? PollIntervalSeconds,
         int? FailureThreshold,
-        Guid[]? GroupIds);
+        Guid[]? GroupIds,
+        HttpProbeOptionsRequest? Http);
+
+    /// <param name="Method"><c>"head"</c> or <c>"get"</c>.</param>
+    /// <param name="Path">No leading slash, e.g. <c>"api/health"</c> — trimmed if given with one.</param>
+    /// <param name="UseHttps"><see langword="true"/> for <c>https://</c>, <see langword="false"/> for <c>http://</c>.</param>
+    /// <param name="IgnoreCertificateErrors">Skips TLS certificate validation for this probe's own requests.</param>
+    /// <param name="TimeoutSeconds">
+    /// Omitted on create defaults to <see cref="HttpProbeOptions.DefaultTimeoutSeconds"/>;
+    /// omitted on update keeps the probe's current value (plan 003's Decision 4a).
+    /// </param>
+    /// <param name="ExpectedStatusCode">Unset means "only a 2xx response counts as success."</param>
+    /// <param name="ExpectedStatusCodeNegate">Negates <paramref name="ExpectedStatusCode"/>'s match.</param>
+    /// <param name="ExpectedBodyText">
+    /// Evaluated only once the status check passes. Rejected when <c>method</c> is
+    /// <c>"head"</c> — a HEAD response has no body.
+    /// </param>
+    /// <param name="ExpectedBodyTextNegate">Negates <paramref name="ExpectedBodyText"/>'s match.</param>
+    /// <param name="Credential">Optional credential to present. Omitted or <c>type: "none"</c> means no credential.</param>
+    internal sealed record HttpProbeOptionsRequest(
+        string? Method,
+        string? Path,
+        bool? UseHttps,
+        bool? IgnoreCertificateErrors,
+        int? TimeoutSeconds,
+        int? ExpectedStatusCode,
+        bool? ExpectedStatusCodeNegate,
+        string? ExpectedBodyText,
+        bool? ExpectedBodyTextNegate,
+        HttpCredentialRequest? Credential);
+
+    /// <param name="Type"><c>"none"</c>, <c>"bearer"</c> or <c>"basic"</c>.</param>
+    /// <param name="Username">Basic auth only — not a secret, round-trips in the clear.</param>
+    /// <param name="Secret">
+    /// Write-only (plan 003's Decision 2): absent/null keeps the stored value, <c>""</c>
+    /// clears it, non-empty is protected and replaces it. <c>type == "none"</c> clears any
+    /// stored secret regardless of what else is sent.
+    /// </param>
+    internal sealed record HttpCredentialRequest(string? Type, string? Username, string? Secret);
 
     internal sealed record PauseProbeRequest(bool IsPaused);
 
@@ -469,5 +729,21 @@ internal static class ProbeEndpoints
         ProbeStatus Status,
         string? LastDetail,
         DateTimeOffset? LastCheckedAt,
-        Guid[] GroupIds);
+        Guid[] GroupIds,
+        HttpProbeOptionsResponse? Http);
+
+    /// <summary>Never carries a secret — only <see cref="HttpCredentialResponse.HasSecret"/>.</summary>
+    public sealed record HttpProbeOptionsResponse(
+        HttpProbeMethod Method,
+        string Path,
+        bool UseHttps,
+        bool IgnoreCertificateErrors,
+        int TimeoutSeconds,
+        int? ExpectedStatusCode,
+        bool ExpectedStatusCodeNegate,
+        string? ExpectedBodyText,
+        bool ExpectedBodyTextNegate,
+        HttpCredentialResponse Credential);
+
+    public sealed record HttpCredentialResponse(HttpCredentialType Type, string? Username, bool HasSecret);
 }

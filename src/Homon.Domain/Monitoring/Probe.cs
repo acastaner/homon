@@ -80,6 +80,12 @@ public sealed class Probe
     public string? LastDetail { get; set; }
 
     /// <summary>
+    /// Options for <see cref="ProbeKind.Http"/> probes only — null for every other kind.
+    /// Owned, stored as its own jsonb column; see plan 003's Decision 1.
+    /// </summary>
+    public HttpProbeOptions? HttpOptions { get; set; }
+
+    /// <summary>
     /// Records one poll outcome: advances the streak counters through
     /// <see cref="ProbeStateMachine.Apply"/>, derives the new <see cref="Status"/>, and
     /// stamps the live-state fields. The caller is responsible for also appending a
