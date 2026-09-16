@@ -13,7 +13,7 @@ reviews and merges the work.
 | --- | --- | --- | --- | --- |
 | 001 | DONE | — | — | Scaffolding — solution, toolchain, plumbing, gate, Docker, docs |
 | 002 | DONE (2026-09-16, `2bacef1`) | L | 013 | Monitoring core, probe groups and the ping probe |
-| 003 | planned | M | 002 | HTTP/HTTPS probe |
+| 003 | DONE (2026-09-16, `b92eb30`) | M | 002 | HTTP/HTTPS probe |
 | 004 | planned | M | 002, 003 | SMB/CIFS probe (managed client) |
 | 005 | planned | S | 002, 003 | SNMP probe scaffold |
 | 006 | planned | M | — (reuses 002's ordering convention) | Links |
@@ -42,6 +42,9 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   `ProbeScheduler` (30 s per-poll cap), `ProbeEndpoints`, the probe form's per-kind region.
   FailureThreshold defaults to 2 (1–10 per probe); aggregate uptime is the mean of
   per-probe uptime; an unpaused probe is due on the next tick.
+- **002 under-delivered its own Decision 10** (the probe form's kind selector shipped inert,
+  with no per-kind conditional region). Plan 003 builds that structure instead, since it is
+  the first plan with a second kind; 004 and 005 extend whatever 003 lands.
 - **003's maintainer decisions:** with no expectation configured only a 2xx response is up;
   HEAD/GET only; per-probe timeout 1–25 s (default 10); redirects followed.
 - **003 sets patterns that others reuse by name:** per-kind probe options as one nullable
@@ -63,6 +66,11 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   highest `### 3.N` at execution time and takes the next.
 
 ## Cross-plan follow-ups (not in any plan yet)
+
+- **Tap targets (for 012).** The design brief asks for controls ≥40px, but nothing asserts
+  it: native unstyled checkboxes are 13×13 and selects 24px tall before the design pass, so
+  plan 003's e2e probe-form test deliberately checks only horizontal overflow. When 012
+  styles the forms, add the tap-target assertion to the admin specs.
 
 - **Time zone.** 009 formats alert times in UTC because no zone setting exists; 011 then
   introduces `Calendar:TimeZone` (validated IANA id, `tzdata` added to the Alpine runtime
