@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup Label="ASP.NET Core">
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
     <!--
       Homon.Infrastructure targets plain Microsoft.NET.Sdk, not Microsoft.NET.Sdk.Web, so
       unlike Homon.Api it gets no FrameworkReference to Microsoft.AspNetCore.App —
@@ -23,10 +23,10 @@
   </ItemGroup>
 
   <ItemGroup Label="Configuration and options">
-    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12" />
     <!--
       AddHttpClient (plan 003's HttpProbeRunner). Reaches Homon.Infrastructure today only as
       an undeclared transitive dependency of the Resend package, pinned at 8.0.0 there — add
@@ -36,8 +36,8 @@
   </ItemGroup>
 
   <ItemGroup Label="Data access">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
@@ -47,7 +47,7 @@
       behind Homon's own IAlertEmailSender abstraction so it can be replaced with direct
       REST calls without touching callers.
     -->
-    <PackageVersion Include="Resend" Version="0.8.0" />
+    <PackageVersion Include="Resend" Version="0.18.0" />
   </ItemGroup>
 
   <!--
