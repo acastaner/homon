@@ -59,6 +59,13 @@ describe('AdminProbesPage', () => {
     expect(kindSelect.value).toBe('ping')
 
     expect((screen.getByLabelText('Failure threshold') as HTMLInputElement).value).toBe('2')
+
+    // The API's bounds (Probe.cs), so the browser refuses an out-of-range value before the
+    // round trip instead of the user meeting a 400.
+    expect(screen.getByLabelText('Poll interval (seconds)')).toHaveAttribute('min', '15')
+    expect(screen.getByLabelText('Poll interval (seconds)')).toHaveAttribute('max', '86400')
+    expect(screen.getByLabelText('Failure threshold')).toHaveAttribute('min', '1')
+    expect(screen.getByLabelText('Failure threshold')).toHaveAttribute('max', '10')
   })
 
   it('selecting HTTP reveals the HTTP fieldset; selecting Ping again hides it', async () => {

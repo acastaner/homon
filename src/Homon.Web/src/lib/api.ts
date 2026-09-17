@@ -21,18 +21,35 @@ export class ApiError extends Error {
 }
 
 /**
- * The `detail` sentence of an RFC 9457 problem, or null when the response carried none.
- * The API writes `detail` to be read by whoever hit it, so rendering it verbatim beats a
- * local paraphrase that goes stale.
+ * The sentence to show for an RFC 9457 problem, or null when the response carried none.
+ * The API writes its messages to be read by whoever hit it, so rendering them verbatim beats
+ * a local paraphrase that goes stale.
+ *
+ * `detail` wins when present. Otherwise the messages of a validation problem's `errors` map
+ * are joined: `TypedResults.ValidationProblem` sets no `detail`, so reading `detail` alone
+ * turned every 400 ("Poll interval must be between 15 and 86400 seconds.") into the form's
+ * generic fallback, which told the user nothing about what to fix.
  */
 export function problemDetail(error: unknown): string | null {
   if (!(error instanceof ApiError) || typeof error.problem !== 'object' || error.problem === null) {
     return null
   }
 
-  const detail = (error.problem as { detail?: unknown }).detail
+  const { detail, errors } = error.problem as { detail?: unknown; errors?: unknown }
 
-  return typeof detail === 'string' && detail.length > 0 ? detail : null
+  if (typeof detail === 'string' && detail.length > 0) {
+    return detail
+  }
+
+  if (typeof errors !== 'object' || errors === null) {
+    return null
+  }
+
+  const messages = Object.values(errors)
+    .flat()
+    .filter((message): message is string => typeof message === 'string' && message.length > 0)
+
+  return messages.length > 0 ? messages.join(' ') : null
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {

@@ -28,4 +28,26 @@ describe('apiFetch', () => {
     expect(problemDetail(error)).toBe('Administrators only.')
     expect(problemDetail(new Error('plain'))).toBeNull()
   })
+
+  it("falls back to a validation problem's field messages when it has no detail", async () => {
+    stubFetch({
+      '/api/v1/probes': {
+        status: 400,
+        body: {
+          title: 'One or more validation errors occurred.',
+          errors: {
+            pollIntervalSeconds: ['Poll interval must be between 15 and 86400 seconds.'],
+            failureThreshold: ['Failure threshold must be between 1 and 10.'],
+          },
+        },
+      },
+    })
+
+    const error = await apiFetch('/probes').catch((caught: unknown) => caught)
+
+    expect(problemDetail(error)).toBe(
+      'Poll interval must be between 15 and 86400 seconds. Failure threshold must be between 1 and 10.',
+    )
+    expect(problemDetail(new ApiError(400, 'empty', { errors: {} }))).toBeNull()
+  })
 })

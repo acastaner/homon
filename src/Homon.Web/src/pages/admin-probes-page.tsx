@@ -357,6 +357,10 @@ function ProbeForm({
           id="probe-poll-interval"
           name="pollIntervalSeconds"
           type="number"
+          // Probe.MinPollIntervalSeconds / MaxPollIntervalSeconds — the API still validates;
+          // these only stop the browser submitting a value it would reject.
+          min={15}
+          max={86400}
           required
           value={pollIntervalSeconds}
           onChange={(event) => setPollIntervalSeconds(Number(event.target.value))}
@@ -371,6 +375,9 @@ function ProbeForm({
           id="probe-failure-threshold"
           name="failureThreshold"
           type="number"
+          // Probe.MinFailureThreshold / MaxFailureThreshold.
+          min={1}
+          max={10}
           required
           value={failureThreshold}
           onChange={(event) => setFailureThreshold(Number(event.target.value))}
