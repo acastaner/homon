@@ -435,6 +435,61 @@ it was before this plan — the maintainer chose "fixed, but honest" over a new 
 surface on 2026-09-18. If a household ever needs it configurable, `GET /api/v1/meta`
 reporting it from `MonitoringOptions` is the cheapest route, not a database singleton.
 
+### 3.21 The session cookie's `Secure` attribute follows the request's real scheme, opt-in
+
+Homon's first production deployment (`clockmaster`, 2026-09-18) exposed a defect an
+always-`Secure` cookie hides until it is reached over plain HTTP: a LAN-first origin like
+`http://homon.lan.acastaner.fr:8102` gets a `Set-Cookie: homon.sid=…; secure` on a
+successful sign-in, and a browser silently discards a `Secure` cookie delivered over plain
+HTTP — `localhost` is the only exemption. The sign-in endpoint returns `204`, the cookie
+never lands, and the next request is anonymous; nothing is logged because nothing failed.
+
+The fix is two changes, not one, because relaxing the cookie policy on its own would quietly
+weaken the deployment that *does* terminate TLS at a WAF. `src/Homon.Web/nginx.conf` listens
+on plain `:80` and previously set `X-Forwarded-Proto: $scheme` unconditionally — always
+`http`, overwriting whatever a WAF in front had already set. nginx therefore now forwards
+the client's *real* scheme through a new `map $http_x_forwarded_proto $homon_forwarded_proto`,
+placed in the `http` context beside the existing `$homon_cache` map (the only context `map`
+is legal in). The map is a strict allow-list — only the literal values `http` and `https`
+pass through; anything else, including a comma-joined list from a double proxy, falls back
+to `$scheme` — so an unexpected header value degrades to today's behaviour rather than
+travelling on uninspected into `Request.Scheme`. This is deliberately not keyed on
+`$remote_addr`: under rootless Docker the published port is SNATed, so a LAN client and the
+WAF arrive at the web container from the same address, and there is nothing to discriminate
+on. A client can therefore claim `https` over plain HTTP; the only effect is that its own
+cookie is marked `Secure` and its own browser refuses to store it — self-inflicted and inert.
+Stripping `Secure` on the WAF path is not reachable the other way, because the WAF sets the
+header itself and replaces whatever the client sent. This all depends on
+`ReverseProxy:KnownNetwork` (`compose.prod.yaml`, default `172.16.0.0/12`) matching the
+network the web container reaches the api container from — that setting is what switches the
+forwarded-headers middleware on at all, unchanged by this plan.
+
+Only with that in place is it safe to let the cookie policy follow the request: a new flag,
+`Auth:AllowPlainTextSessions`, default `false`, changes `CookieAuthenticationOptions.Cookie.
+SecurePolicy` from unconditional `CookieSecurePolicy.Always` to `CookieSecurePolicy.
+SameAsRequest` when set (Development already used `SameAsRequest` unconditionally, and still
+does). Deliberately `SameAsRequest`, not a blanket `CookieSecurePolicy.None` — with nginx
+forwarding the real scheme, `SameAsRequest` is correct on *both* paths from one setting: a
+WAF-fronted request is seen as HTTPS and still receives a `Secure` cookie, while a plain-HTTP
+LAN request receives one the browser will actually store. `None` would give up the WAN
+path's protection to fix the LAN's. The policy is registered in its own
+`AddOptions<CookieAuthenticationOptions>(...).Configure<IOptions<AuthOptions>>(...)` call,
+separate from the rest of the cookie configuration delegate, because it must resolve
+`IOptions<AuthOptions>` from the built container rather than closing over
+`builder.Configuration` — the standing rule recorded in `CLAUDE.md` and already followed by
+the sign-in rate limiter.
+
+The default is `false` on both ends (`AuthOptions.AllowPlainTextSessions` and
+`compose.prod.yaml`'s `HOMON_ALLOW_PLAINTEXT_SESSIONS`), so a host that does nothing keeps
+today's behaviour exactly — this is a bridge for a deployment shape the project already
+documents for itself (`compose.prod.yaml`'s own header: "a reverse proxy … a WAF, nothing on
+a LAN"), not a change to the default posture.
+
+**Accepted residual risk**: with the flag on, the session cookie travels in clear on that
+network, so anyone who can sniff the LAN segment can replay the session — accepted because
+the alternative is no administration at all on that host, and retired by putting TLS on the
+plain-HTTP origin, at which point the flag is set back to `false` and nothing else changes.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.

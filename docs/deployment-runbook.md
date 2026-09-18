@@ -51,6 +51,13 @@ The report endpoint arrives with the Backups module; until then the key can be v
 `curl -H "Authorization: Bearer hmn_…" http://127.0.0.1:8102/api/v1/auth/session` — the
 response's `scope` field should read `"readWrite"`.
 
+**A deployment reached over plain HTTP** — a LAN name with no TLS in front — must set
+`HOMON_ALLOW_PLAINTEXT_SESSIONS=true` in `.env`, or the administrator cannot sign in: the
+form succeeds and silently returns to the signed-out state, because a browser discards a
+`Secure` cookie delivered over plain HTTP. `http://localhost` is exempt from that rule, so
+on a host that has not set the flag, `ssh -L 8102:127.0.0.1:8102 <host>` and signing in
+against `http://localhost:8102` is the workaround.
+
 ## Updating
 
 ```bash
