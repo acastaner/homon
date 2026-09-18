@@ -95,6 +95,14 @@ services:
       # without a session. The reverse proxy's network rules are the intended gate.
       Auth__RequireSignInForReaders: ${HOMON_REQUIRE_SIGN_IN_FOR_READERS:-false}
 
+      # A LAN-first deployment is reached over plain HTTP, where an always-Secure session
+      # cookie is discarded by the browser and nobody can sign in. "true" marks the cookie
+      # Secure only for requests that genuinely arrived over HTTPS — so a WAF-fronted origin
+      # keeps its Secure cookie while the LAN one works at all. Set it back to false once the
+      # plain-HTTP origin gains TLS. The web container's nginx forwards the client's real
+      # scheme, which is what makes one setting correct on both paths.
+      Auth__AllowPlainTextSessions: ${HOMON_ALLOW_PLAINTEXT_SESSIONS:-false}
+
       Email__ResendApiToken: ${RESEND_API_TOKEN:?set RESEND_API_TOKEN}
       Email__FromAddress: ${HOMON_FROM_ADDRESS:?set HOMON_FROM_ADDRESS}
       Email__FromName: Homon
