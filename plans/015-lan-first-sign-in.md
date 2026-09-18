@@ -394,12 +394,20 @@ Leave `location = /api/health` alone — it proxies a health check that has no s
 image the production stack uses:
 
 ```bash
-docker run --rm --name homon-ci-nginx-check \
+docker run --rm --name homon-ci-nginx-check --add-host api:127.0.0.1 \
   -v "$PWD/src/Homon.Web/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
   nginx:alpine nginx -t
 ```
 
 Expected: `syntax is ok` and `test is successful`.
+
+**`--add-host api:127.0.0.1` is why this works at all** (added 2026-09-18 after execution hit
+it). `nginx -t` resolves every `proxy_pass` upstream at parse time, and this config proxies to
+`http://api:8080` — a Compose service name. A standalone `docker run` has no Compose network, so
+without the flag the check fails with `host not found in upstream "api"` and tells you nothing
+about your change: it fails identically on an unmodified `nginx.conf`. The flag invents a
+throwaway answer for that one name; nothing connects to it, and the config under test is not
+modified in any way.
 
 **`--name homon-ci-nginx-check` is not decoration and must not be dropped.** This repo installs
 `ci/guard-docker.py` as a PreToolUse hook on Bash (`.claude/settings.json`); it refuses any

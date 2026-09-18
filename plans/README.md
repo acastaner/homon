@@ -26,7 +26,7 @@ reviews and merges the work.
 | 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
 | 014 | DONE (2026-09-18, `5e01612`) | M | — | Dashboard auto-refresh: the freshness indicator, focus refetch and a manual Refresh control |
-| 015 | planned | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
+| 015 | DONE (2026-09-18, `2a78135`) | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
 | 016 | planned | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
@@ -41,11 +41,19 @@ from holding a session once it does. **They should ship in one release**, becaus
 `compose.prod.yaml` and `deploy.sh` does not carry a compose change across (it pulls images and
 pins `HOMON_VERSION`, nothing more).
 
-**014 is executed but NOT merged.** It sits on the branch `plan/014-dashboard-auto-refresh`
-(worktree `.claude/worktrees/plan-014`, head `5e01612`, six commits), reviewed green on
-`./ci/run-ci.sh web` and `./ci/run-ci.sh e2e`. Merging is the maintainer's call:
-`git merge --ff-only plan/014-dashboard-auto-refresh`, then
-`git worktree remove .claude/worktrees/plan-014 && git branch -d plan/014-dashboard-auto-refresh`.
+**014 has since been merged** — `main` carries `5e01612` and the branch and worktree are gone.
+
+**015 is executed but NOT merged.** It sits on the branch `plan/015-lan-first-sign-in`
+(worktree `.claude/worktrees/plan-015`, head `2a78135`, seven commits), reviewed green: the
+reviewer re-ran `./ci/run-ci.sh api` independently — Release build clean, **287 passed, 0
+skipped**, with all three new `PlainTextSessionTests` confirmed `Passed` in the TRX — and the
+executor additionally reported `./ci/run-ci.sh web` (76 tests) and `./ci/run-ci.sh e2e` (67
+tests, both viewports) green. The diff is exactly the eight files plan 015 lists in scope.
+Merging is the maintainer's call:
+`git merge --ff-only plan/015-lan-first-sign-in`, then
+`git worktree remove .claude/worktrees/plan-015 && git branch -d plan/015-lan-first-sign-in`.
+
+**016 has not been executed** and should ship in the same release as 015 (see above).
 
 Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · REJECTED (one-line reason).
 
@@ -77,6 +85,13 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   single-flight) and builds the cache from its own description if 010 has not landed.
 - **012 runs last**; its Slice A (tokens, fonts, theme bootstrap, toggle) depends only on
   001 and can land early.
+- **015 introduced `Auth:AllowPlainTextSessions`** (default `false`, surfaced as
+  `HOMON_ALLOW_PLAINTEXT_SESSIONS`) and the `$homon_forwarded_proto` allow-list map in
+  `src/Homon.Web/nginx.conf`. Anything that later touches the session cookie's `SecurePolicy`,
+  the forwarded-headers block, or that map must read `docs/ARCHITECTURE.md` §3.21 first: the
+  flag is only safe *because* nginx forwards the client's real scheme, and the two are a pair.
+- **016 also edits `compose.prod.yaml`** and is unexecuted; it and 015 touch different lines
+  and merge cleanly, but a release carrying one should carry both.
 - **015 introduces `Auth:AllowPlainTextSessions`** (default `false`) and the
   `$homon_forwarded_proto` allow-list map in `src/Homon.Web/nginx.conf`. The two changes are
   coupled and ordered: nginx currently overwrites `X-Forwarded-Proto` with its own `$scheme`,
