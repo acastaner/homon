@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router'
 
+import { RefreshIndicator } from '@/components/refresh-indicator'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { useMeta } from '@/lib/meta'
 import { useSession, useSignOut } from '@/lib/session'
@@ -21,6 +22,13 @@ import { useSession, useSignOut } from '@/lib/session'
  * `getByText` strict-mode query that expects exactly one match) or hide it outright on
  * mobile. One instance, always visible, wrapping onto a second line on narrow viewports
  * instead — the pragmatic reading of Decision 7's hard boundary.
+ *
+ * The same reasoning applies to `RefreshIndicator` (plan 014, D2): the brief also splits its
+ * "refreshed 42 s ago" timestamp between the banner (desktop) and the page header (phone), and
+ * a `hidden`/`sm:flex` pair would hit the identical jsdom problem — no stylesheet applies in
+ * the unit environment, so both copies would resolve and every `getByText`/`getByRole`
+ * strict-mode query on it would throw. One always-visible instance instead, relying on the
+ * banner's existing `flex-wrap`/`gap-y-2` to wrap it onto a second line on a phone.
  */
 export function AppShell() {
   const session = useSession()
@@ -65,6 +73,7 @@ export function AppShell() {
           </ul>
         </nav>
         <div className="ml-auto flex flex-wrap items-center gap-3 py-1">
+          <RefreshIndicator />
           {session.data ? (
             <p className="flex items-center gap-2 text-[13px] text-muted">
               <span>Signed in as {session.data.name}</span>

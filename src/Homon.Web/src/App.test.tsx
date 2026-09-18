@@ -38,6 +38,13 @@ describe('App', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
   })
 
+  it('carries a Refresh button in the banner on the sign-in route', () => {
+    stubFetch(anonymous)
+    renderWithProviders(<App />, { initialEntries: ['/admin/sign-in'] })
+
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+  })
+
   it('gates the admin area behind a sign-in prompt for anonymous visitors', async () => {
     stubFetch(anonymous)
     renderWithProviders(<App />, { initialEntries: ['/admin/probes'] })
