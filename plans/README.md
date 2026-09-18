@@ -43,42 +43,37 @@ pins `HOMON_VERSION`, nothing more).
 
 **014 has since been merged** — `main` carries `5e01612` and the branch and worktree are gone.
 
-**015 and 016 are both executed and reviewed green, and NEITHER is merged.** Each sits on its
-own branch, both cut from `main` at `a3ac3df`, so either can be taken or dropped independently:
+**015 and 016 are both merged.** `main` carries them as `b511a62`; 015 fast-forwarded, 016 was
+rebased onto it and fast-forwarded after. The merged tree was re-verified, not assumed:
+`./ci/run-ci.sh api` on `main` → Release build clean, **287 passed, 0 skipped**, and
+`docker compose --env-file .env.example -f compose.prod.yaml config` renders both changes
+together — `Auth__AllowPlainTextSessions: "false"` and `net.ipv4.ping_group_range: 0 65536`.
 
-| | Branch | Worktree | Head | Commits |
-| --- | --- | --- | --- | --- |
-| 015 | `plan/015-lan-first-sign-in` | `.claude/worktrees/plan-015` | `f76f6a4` | 8 |
-| 016 | `plan/016-rootless-ping-group-range` | `.claude/worktrees/plan-016` | `a8503ae` | 2 |
+**015's evidence.** The reviewer re-ran `./ci/run-ci.sh api` independently on the branch —
+Release build clean, 287 passed, 0 skipped, with all three new `PlainTextSessionTests` confirmed
+`Passed` in the TRX — and the executor additionally reported `./ci/run-ci.sh web` (76 tests) and
+`./ci/run-ci.sh e2e` (67 tests, both viewports) green. The diff was exactly the eight files plan
+015 listed in scope.
 
-**015's evidence.** The reviewer re-ran `./ci/run-ci.sh api` independently — Release build
-clean, **287 passed, 0 skipped**, with all three new `PlainTextSessionTests` confirmed `Passed`
-in the TRX — and the executor additionally reported `./ci/run-ci.sh web` (76 tests) and
-`./ci/run-ci.sh e2e` (67 tests, both viewports) green. The diff is exactly the eight files plan
-015 lists in scope.
+**016's evidence, and its limit.** The gate cannot observe that change — nothing in
+`./ci/run-ci.sh` reads `compose.prod.yaml`, and the diff compiles nothing — so it was verified
+by rendering the file, which shows the value the container is handed rather than merely that the
+YAML parses. **A green gate says nothing about whether 016 works.** The real proof is a rootless
+host: see plan 016's "Post-deploy verification".
 
-**016's evidence.** The gate cannot observe this change — nothing in `./ci/run-ci.sh` reads
-`compose.prod.yaml`, and the diff compiles nothing — so the reviewer verified it by rendering
-the file instead: `docker compose --env-file .env.example -f compose.prod.yaml config` resolves
-`net.ipv4.ping_group_range: 0 65536`, which is the value the container is actually handed. The
-executor separately reported all three suites green (api at **284**, i.e. the baseline without
-015's three new tests, which is the arithmetic one expects from a branch cut off `main`). The
-diff is the two files plan 016 lists in scope. **The real proof is on a rootless host** and
-remains the maintainer's: see plan 016's "Post-deploy verification".
+### Neither plan is live until the host is updated
 
-**Only the 015 branch touches this index file**, deliberately, so the two branches cannot
-conflict over it. Merge 015 first and the sequence stays fast-forward throughout:
+Both changed `compose.prod.yaml`, and **`deploy.sh` does not carry a compose change onto the
+host** — it pulls images and pins `HOMON_VERSION`, nothing more. The new `compose.prod.yaml`
+must be copied to `clockmaster` *before* `deploy.sh` runs, or the host keeps its old copy and
+016's fix is absent, api still failing to start.
 
-```bash
-git merge --ff-only plan/015-lan-first-sign-in
-git rebase main plan/016-rootless-ping-group-range   # 016 was cut before 015 landed
-git merge --ff-only plan/016-rootless-ping-group-range
-git worktree remove .claude/worktrees/plan-015 && git branch -d plan/015-lan-first-sign-in
-git worktree remove .claude/worktrees/plan-016 && git branch -d plan/016-rootless-ping-group-range
-```
-
-Taking 016 alone instead needs no rebase; taking 015 alone leaves this index claiming 016 is
-done, which it is — on a branch that was not taken.
+015 additionally needs a **rebuilt `homon-web` image**: `src/Homon.Web/nginx.conf` is baked in
+at build time (`compose.prod.yaml`'s `web` service runs `ghcr.io/acastaner/homon-web`), so the
+forwarded-scheme map only exists once a release is built, pushed and pulled. Setting
+`HOMON_ALLOW_PLAINTEXT_SESSIONS=true` against an old web image gives the LAN a storable cookie
+but leaves a WAF-fronted origin without one — exactly the half-state decision D5 was written to
+avoid. Ship the image and the compose file together.
 
 **Both changed `compose.prod.yaml`, and `deploy.sh` does not carry a compose change onto the
 host.** Whichever of these ships, the new `compose.prod.yaml` has to be copied to `clockmaster`
