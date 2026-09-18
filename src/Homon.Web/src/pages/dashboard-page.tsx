@@ -112,8 +112,10 @@ export function DashboardPage() {
   const sections = dashboardSections(status.data, { phone: isPhone })
   const totals = status.data?.totals
   const now = new Date()
-  const { data: links = [] } = useLinks()
-  const { data: pages = [] } = usePublishedPages()
+  // Five minutes, not the status board's thirty seconds: links and pages change only when an
+  // administrator edits them. The banner's Refresh button covers the impatient case.
+  const { data: links = [] } = useLinks({ refetchInterval: 5 * 60 * 1000, refetchOnWindowFocus: true })
+  const { data: pages = [] } = usePublishedPages({ refetchInterval: 5 * 60 * 1000, refetchOnWindowFocus: true })
   const { data: weather, isError: isWeatherError, error: weatherError } = useWeather()
 
   return (

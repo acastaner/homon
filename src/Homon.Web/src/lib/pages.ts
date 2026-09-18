@@ -45,8 +45,13 @@ export function fetchPublishedPages(): Promise<PageSummary[]> {
   return apiFetch<PageSummary[]>('/pages')
 }
 
-export function usePublishedPages() {
-  return useQuery({ queryKey: PAGES_QUERY_KEY, queryFn: fetchPublishedPages })
+/**
+ * Takes its polling options from the caller rather than setting them here — same reasoning as
+ * `useLinks` in `lib/links.ts` (kept consistent across the two hooks the dashboard shares
+ * with admin pages, even though today `DashboardPage` is this one's only caller).
+ */
+export function usePublishedPages(options: { refetchInterval?: number; refetchOnWindowFocus?: boolean } = {}) {
+  return useQuery({ queryKey: PAGES_QUERY_KEY, queryFn: fetchPublishedPages, ...options })
 }
 
 export function fetchAdminPages(): Promise<AdminPageSummary[]> {

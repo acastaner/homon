@@ -25,8 +25,15 @@ export function fetchLinks(): Promise<Link[]> {
   return apiFetch<Link[]>('/links')
 }
 
-export function useLinks() {
-  return useQuery({ queryKey: LINKS_QUERY_KEY, queryFn: fetchLinks })
+/**
+ * Takes its polling options from the caller rather than setting them here, because
+ * `AdminLinksPage` shares this hook and reorders rows straight out of `data`: a background
+ * refetch landing mid-reorder would shuffle the list under the administrator's cursor. The
+ * dashboard passes an interval; the admin page passes nothing and keeps today's fetch-once
+ * behaviour.
+ */
+export function useLinks(options: { refetchInterval?: number; refetchOnWindowFocus?: boolean } = {}) {
+  return useQuery({ queryKey: LINKS_QUERY_KEY, queryFn: fetchLinks, ...options })
 }
 
 function useInvalidateLinks() {
