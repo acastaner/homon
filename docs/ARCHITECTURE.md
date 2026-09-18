@@ -385,6 +385,56 @@ cache, and per-reader calls would multiply the provider's rate limit by family s
 nothing; geocoding search — pasting coordinates is deferred to a follow-up, which would
 change only how the admin form fills latitude/longitude, not the wire contract.
 
+### 3.20 The dashboard's freshness is the browser's clock, and the banner says so
+
+Plan 012 wired every design-brief component but one: the Banner's "refreshed 42 s ago"
+timestamp, deferred because a plain `useStatus()` in `AppShell` would add a `/status` fetch
+to every route, `/admin/sign-in` included. Plan 014 closed that gap on 2026-09-18 with a
+*disabled* observer — `useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchStatus, enabled:
+false })` inside `RefreshIndicator`. `enabled: false` suppresses only automatic fetching; the
+observer still subscribes to the `['status']` cache entry and re-renders when
+`DashboardPage`'s own `useStatus()` writes to it. On a route where nothing has populated that
+entry — sign-in, the dashboard's first paint — `dataUpdatedAt` is `0` and the indicator
+renders nothing rather than "refreshed 57 years ago".
+
+The age is measured `dataUpdatedAt` (TanStack's browser-side receive timestamp) against
+`Date.now()`, never against `Status.generatedAt` on the wire. Those are two different clocks;
+`generatedAt` is stamped by the API server's `TimeProvider`, and a drifted household machine
+would render a nonsensical "refreshed -3 s ago" against it. `generatedAt` stays on the wire
+unconsumed — an honest answer to "when did the server compute this", and a future
+server-push or multi-instance deployment would still want it.
+
+The indicator renders once, always visible, not as the brief's banner/desktop ·
+page-header/phone pair: jsdom applies no stylesheet, so a `hidden`/`sm:flex` split would
+resolve both copies in the unit suite and break every `getByText`/`getByRole` strict-mode
+query — the same reason §3.10's design pass already gives for "Signed in as …". The banner's
+existing `flex-wrap`/`gap-y-2` wraps it onto a second line on a phone instead, and
+`e2e/layout.spec.ts` covers the result at both viewport projects.
+
+Returning to a backgrounded tab now refetches the dashboard's queries (status, weather, and
+— on the dashboard only — links and pages) immediately rather than after up to 30 more
+seconds of a frozen "Checked" column: `useStatus`, `useWeather`, and `DashboardPage`'s calls
+to `useLinks`/`usePublishedPages` set `refetchOnWindowFocus: true`, overriding `main.tsx`'s
+global `refetchOnWindowFocus: false` per query. That global default still protects every
+admin form from refetching under an administrator's hands. The override is safe because
+`main.tsx`'s global `staleTime: 30_000` still gates it — a focus event inside 30 s of the
+last successful fetch finds the cache entry not yet stale and issues no request; only a
+return after 30 s refetches. `useLinks`/`usePublishedPages` take their polling options from
+the caller (an optional `{ refetchInterval?, refetchOnWindowFocus? }`, defaulting to `{}`)
+rather than setting them internally, because `AdminLinksPage` shares `useLinks` and reorders
+rows straight out of its `data` — a background refetch landing mid-reorder would shuffle the
+list under the administrator's cursor.
+
+The banner also gained a Refresh button, next to the timestamp, calling
+`queryClient.invalidateQueries()` with no filter — refetching whatever the current route has
+mounted, so it is correct on the dashboard and on every admin page without a hand-maintained
+list of query keys.
+
+The poll interval itself stays a hard-coded 30 seconds in `lib/status.ts`'s `useStatus`, as
+it was before this plan — the maintainer chose "fixed, but honest" over a new configuration
+surface on 2026-09-18. If a household ever needs it configurable, `GET /api/v1/meta`
+reporting it from `MonitoringOptions` is the cheapest route, not a database singleton.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.
