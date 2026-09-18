@@ -121,12 +121,15 @@ export async function fetchWeatherSettings(): Promise<WeatherSettings | null> {
 /**
  * `refetchInterval` matches `WeatherCache.FreshFor` on the server — anything shorter would
  * only re-read the same cached answer.
+ *
+ * `refetchOnWindowFocus: true` — same reasoning as `useStatus` in `lib/status.ts` (plan 014, D5).
  */
 export function useWeather() {
   return useQuery({
     queryKey: WEATHER_QUERY_KEY,
     queryFn: fetchWeather,
     refetchInterval: 15 * 60 * 1000,
+    refetchOnWindowFocus: true,
   })
 }
 

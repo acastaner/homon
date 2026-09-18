@@ -56,9 +56,22 @@ export function fetchStatus(): Promise<Status> {
  * Polls every 30 seconds — frequent enough that a family glancing at the dashboard sees a
  * state change inside a poll interval or two, infrequent enough that forty open browser tabs
  * on a home network do not turn into a request storm.
+ *
+ * `refetchOnWindowFocus: true` overrides main.tsx's global `refetchOnWindowFocus: false` for
+ * this query alone (plan 014, D5). TanStack pauses `refetchInterval` while the document is
+ * hidden — the normal state of a household dashboard tab left in the background — so without
+ * this a reader returning to the tab would see stale numbers for up to 30 more seconds with
+ * no cue that they were stale. This is safe specifically because the global `staleTime:
+ * 30_000` still gates it: a return inside 30 s finds the cache entry not yet stale and issues
+ * no request; only a return after 30 s refetches immediately.
  */
 export function useStatus() {
-  return useQuery({ queryKey: STATUS_QUERY_KEY, queryFn: fetchStatus, refetchInterval: 30_000 })
+  return useQuery({
+    queryKey: STATUS_QUERY_KEY,
+    queryFn: fetchStatus,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  })
 }
 
 /** One rendered section of the dashboard's Services area: a group, or the ungrouped rest. */
