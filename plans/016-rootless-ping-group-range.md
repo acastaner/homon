@@ -208,13 +208,32 @@ Machine-checkable, here, by the executor:
 # The new value is in place and the old one survives only inside the comment that explains it.
 grep -c 'net.ipv4.ping_group_range: "0 65536"' compose.prod.yaml       # 1
 grep -c 'net.ipv4.ping_group_range: "0 2147483647"' compose.prod.yaml  # 0
-grep -c '2147483647' compose.prod.yaml                                 # 1  (the comment)
+grep -c '2147483647' compose.prod.yaml                                 # 2  (see below)
 grep -c '2147483647' docs/deployment-runbook.md                        # 0
 
 RESEND_API_TOKEN=placeholder \
   docker compose --env-file .env.example -f compose.prod.yaml config -q   # exit 0, no output
 ./ci/run-ci.sh                                # PASS — unchanged; nothing here is compiled
 ```
+
+**On that count of 2** (corrected 2026-09-18, after execution): the comment Step 1 prescribes
+names the old value twice — once in "not the 2147483647 you will see elsewhere" and once in "so
+2147483647 fails the write" — and `grep -c` counts matching *lines*, so the answer is 2 and both
+are inside the comment. Confirm that with `grep -n '2147483647' compose.prod.yaml`: both hits
+must be comment lines, and the line-0 criterion above is what actually proves the setting itself
+changed. Do not reword Step 1's comment to force the count to 1.
+
+Stronger than a parse, and worth running because it is the closest thing to the real proof that
+works off-host — it shows the value Compose will hand the container, not merely that the file is
+valid YAML:
+
+```bash
+RESEND_API_TOKEN=placeholder \
+  docker compose --env-file .env.example -f compose.prod.yaml config \
+  | grep -A1 'sysctls:'
+```
+
+Expected: `net.ipv4.ping_group_range: 0 65536`.
 
 Plus: `plans/README.md` row updated, and `git diff --stat` shows only `compose.prod.yaml`,
 `docs/deployment-runbook.md` and `plans/README.md`.
