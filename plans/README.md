@@ -27,7 +27,7 @@ reviews and merges the work.
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
 | 014 | DONE (2026-09-18, `5e01612`) | M | — | Dashboard auto-refresh: the freshness indicator, focus refetch and a manual Refresh control |
 | 015 | DONE (2026-09-18, `2a78135`) | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
-| 016 | planned | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
+| 016 | DONE (2026-09-18, `a8503ae`) | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
@@ -43,17 +43,47 @@ pins `HOMON_VERSION`, nothing more).
 
 **014 has since been merged** — `main` carries `5e01612` and the branch and worktree are gone.
 
-**015 is executed but NOT merged.** It sits on the branch `plan/015-lan-first-sign-in`
-(worktree `.claude/worktrees/plan-015`, head `2a78135`, seven commits), reviewed green: the
-reviewer re-ran `./ci/run-ci.sh api` independently — Release build clean, **287 passed, 0
-skipped**, with all three new `PlainTextSessionTests` confirmed `Passed` in the TRX — and the
-executor additionally reported `./ci/run-ci.sh web` (76 tests) and `./ci/run-ci.sh e2e` (67
-tests, both viewports) green. The diff is exactly the eight files plan 015 lists in scope.
-Merging is the maintainer's call:
-`git merge --ff-only plan/015-lan-first-sign-in`, then
-`git worktree remove .claude/worktrees/plan-015 && git branch -d plan/015-lan-first-sign-in`.
+**015 and 016 are both executed and reviewed green, and NEITHER is merged.** Each sits on its
+own branch, both cut from `main` at `a3ac3df`, so either can be taken or dropped independently:
 
-**016 has not been executed** and should ship in the same release as 015 (see above).
+| | Branch | Worktree | Head | Commits |
+| --- | --- | --- | --- | --- |
+| 015 | `plan/015-lan-first-sign-in` | `.claude/worktrees/plan-015` | `f76f6a4` | 8 |
+| 016 | `plan/016-rootless-ping-group-range` | `.claude/worktrees/plan-016` | `a8503ae` | 2 |
+
+**015's evidence.** The reviewer re-ran `./ci/run-ci.sh api` independently — Release build
+clean, **287 passed, 0 skipped**, with all three new `PlainTextSessionTests` confirmed `Passed`
+in the TRX — and the executor additionally reported `./ci/run-ci.sh web` (76 tests) and
+`./ci/run-ci.sh e2e` (67 tests, both viewports) green. The diff is exactly the eight files plan
+015 lists in scope.
+
+**016's evidence.** The gate cannot observe this change — nothing in `./ci/run-ci.sh` reads
+`compose.prod.yaml`, and the diff compiles nothing — so the reviewer verified it by rendering
+the file instead: `docker compose --env-file .env.example -f compose.prod.yaml config` resolves
+`net.ipv4.ping_group_range: 0 65536`, which is the value the container is actually handed. The
+executor separately reported all three suites green (api at **284**, i.e. the baseline without
+015's three new tests, which is the arithmetic one expects from a branch cut off `main`). The
+diff is the two files plan 016 lists in scope. **The real proof is on a rootless host** and
+remains the maintainer's: see plan 016's "Post-deploy verification".
+
+**Only the 015 branch touches this index file**, deliberately, so the two branches cannot
+conflict over it. Merge 015 first and the sequence stays fast-forward throughout:
+
+```bash
+git merge --ff-only plan/015-lan-first-sign-in
+git rebase main plan/016-rootless-ping-group-range   # 016 was cut before 015 landed
+git merge --ff-only plan/016-rootless-ping-group-range
+git worktree remove .claude/worktrees/plan-015 && git branch -d plan/015-lan-first-sign-in
+git worktree remove .claude/worktrees/plan-016 && git branch -d plan/016-rootless-ping-group-range
+```
+
+Taking 016 alone instead needs no rebase; taking 015 alone leaves this index claiming 016 is
+done, which it is — on a branch that was not taken.
+
+**Both changed `compose.prod.yaml`, and `deploy.sh` does not carry a compose change onto the
+host.** Whichever of these ships, the new `compose.prod.yaml` has to be copied to `clockmaster`
+*before* `deploy.sh` runs, or the host keeps its old copy — and for 016 that means the api
+container goes on failing to start.
 
 Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · REJECTED (one-line reason).
 
