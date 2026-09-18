@@ -24,10 +24,17 @@ reviews and merges the work.
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
 | 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
+| 014 | DONE (2026-09-18, `5e01612`) | M | — | Dashboard auto-refresh: the freshness indicator, focus refetch and a manual Refresh control |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
 deferred; 012 styles only what has landed and tells those plans how to reuse its primitives.
+
+**014 is executed but NOT merged.** It sits on the branch `plan/014-dashboard-auto-refresh`
+(worktree `.claude/worktrees/plan-014`, head `5e01612`, six commits), reviewed green on
+`./ci/run-ci.sh web` and `./ci/run-ci.sh e2e`. Merging is the maintainer's call:
+`git merge --ff-only plan/014-dashboard-auto-refresh`, then
+`git worktree remove .claude/worktrees/plan-014 && git branch -d plan/014-dashboard-auto-refresh`.
 
 Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · REJECTED (one-line reason).
 
@@ -64,6 +71,10 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   Each tells its executor to compare only the regions it edits in the drift check.
 - `docs/ARCHITECTURE.md` section numbers are not fixed in advance: each plan greps the
   highest `### 3.N` at execution time and takes the next.
+- **014 depends on nothing and touches only `src/Homon.Web`.** It retires the "refreshed N s
+  ago" follow-up above and records its deviations from `docs/design-brief.md`'s Banner rule in
+  `docs/ARCHITECTURE.md`, not in the brief. The dashboard poll interval stays a hard-coded 30 s
+  in `lib/status.ts`; a configurable one was weighed on 2026-09-18 and deferred.
 
 ## Cross-plan follow-ups (not in any plan yet)
 
@@ -78,8 +89,10 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
     variant exists but is unused;
   - "Signed in as … / Sign out" is one always-visible block, not a responsive banner/page-header
     pair (jsdom applies no stylesheet, so two copies both resolve and `getByRole` throws);
-  - the banner's "refreshed N s ago" timestamp is not wired — `Status.generatedAt` exists,
-    but polling it from `AppShell` would add a fetch to every route including sign-in;
+  - ~~the banner's "refreshed N s ago" timestamp~~ — **retired by plan 014** (2026-09-18),
+    which wired it in `AppShell` from a *disabled* cache observer, so no route gains a
+    `/status` fetch. `Status.generatedAt` stays deliberately unconsumed: the browser's own
+    `dataUpdatedAt` is the clock (`docs/ARCHITECTURE.md` §3.20);
   - shadcn's `src/components/ui/*` primitives are installed and committed but unused; the
     pages hand-style native controls. A later plan can adopt them.
 - **Tap targets (for 012).** The design brief asks for controls ≥40px, but nothing asserts
