@@ -89,7 +89,13 @@ docker run --rm -v homon_dataprotection-keys:/keys -v "$PWD":/out alpine tar czf
 The `api` service sets `net.ipv4.ping_group_range` so .NET's `Ping` can open an unprivileged
 ICMP socket under rootless Docker. If the first ping probe reports "permission denied",
 check `docker compose exec api cat /proc/sys/net/ipv4/ping_group_range` — it should read
-`0 2147483647`.
+`0 65536`.
+
+If instead the container refuses to start at all with `failed to write sysctl … invalid
+argument`, the upper bound exceeds what the host's user namespace maps — a rootless host
+maps only the service account's subordinate gid range (see `/etc/subgid`). The fix is a
+smaller upper bound in a host-specific Compose override, **not** `privileged: true` and
+**not** `cap_add: NET_RAW`, neither of which is available to a rootless daemon.
 
 After creating the first probe, `curl http://127.0.0.1:8102/api/v1/status` (or the admin
 UI) should show a non-`Unknown` state within `MonitoringOptions.TickInterval` (5 seconds by

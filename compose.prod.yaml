@@ -156,7 +156,14 @@ services:
     # rather than with CAP_NET_RAW because this is a rootless Docker deployment and a
     # namespaced sysctl is the one knob that works there. Harmless before the module lands.
     sysctls:
-      net.ipv4.ping_group_range: "0 2147483647"
+      # The upper bound is 65536, not the 2147483647 you will see elsewhere: the kernel
+      # resolves BOTH bounds through make_kgid() against the caller's user namespace and
+      # returns EINVAL if either is unmappable. A rootless container maps only the service
+      # account's subordinate range — conventionally 65536 wide — so 2147483647 fails the
+      # write and the container does not start at all. 65536 is valid under a root daemon
+      # too, and comfortably covers this image's own gid (1654, the .NET APP_UID default),
+      # which is the gid that has to be inside the range for Ping to work.
+      net.ipv4.ping_group_range: "0 65536"
     # No published port: reached through `web` only.
 
   web:
