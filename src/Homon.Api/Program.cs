@@ -301,9 +301,6 @@ builder.Services.Configure<CookieAuthenticationOptions>(
         // Lax is sufficient — and Lax, not Strict, so a link into the admin pages from an
         // alert email still arrives signed in.
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
 
         // Eight hours, absolute, not extended by activity — an administrator's working day.
         // "Keep me signed in" opts into a longer, persistent cookie instead; the sign-in
@@ -335,6 +332,25 @@ builder.Services.Configure<CookieAuthenticationOptions>(
             return Task.CompletedTask;
         };
     });
+
+// SecurePolicy is configured apart from the block above because it depends on AuthOptions, and
+// AuthOptions must be resolved from the built container: a value read from builder.Configuration
+// here would predate the configuration a WebApplicationFactory splices in for tests, so every
+// test host would silently see the appsettings default instead of its own override. Same rule as
+// the sign-in rate limiter below.
+//
+// SameAsRequest, not None: with nginx forwarding the client's real scheme
+// (src/Homon.Web/nginx.conf), one setting is correct on both paths — a WAF-fronted request is
+// seen as HTTPS and still gets a Secure cookie, while a plain-HTTP LAN request gets one the
+// browser will actually store. A blanket "never Secure" would give the WAN path away to fix the
+// LAN's.
+builder.Services
+    .AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
+    .Configure<IOptions<AuthOptions>>((options, auth) =>
+        options.Cookie.SecurePolicy =
+            builder.Environment.IsDevelopment() || auth.Value.AllowPlainTextSessions
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always);
 
 // ---- Authorisation ---------------------------------------------------------------------
 
