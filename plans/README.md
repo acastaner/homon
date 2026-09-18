@@ -4,7 +4,8 @@ Numbered in one monotonic sequence; a number is never reused. Each plan is a fil
 `NNN-short-imperative-title.md` and records what it changed and what it decided; the
 decisions themselves live in `docs/ARCHITECTURE.md`.
 
-Plans 002–013 were written on 2026-09-15 against commit `f4e7261`; 002, 003, 006, 007,
+Plans 015–016 were written on 2026-09-18 against commit `5ff263a`, from defects found on the
+first production deployment; both were reviewed on 2026-09-18 (`Reviewed:` line in each). Plans 002–013 were written on 2026-09-15 against commit `f4e7261`; 002, 003, 006, 007,
 010, 012 and 013 were then reviewed cold (`Reviewed:` line in each). Each plan opens with a
 drift check and a list of STOP conditions. The status column is maintained by whoever
 reviews and merges the work.
@@ -25,10 +26,20 @@ reviews and merges the work.
 | 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
 | 013 | DONE (2026-09-16, `1d969e0`) | S | 001 | API key scopes (read / read-write) and optional expiry — executes before 002 |
 | 014 | DONE (2026-09-18, `5e01612`) | M | — | Dashboard auto-refresh: the freshness indicator, focus refetch and a manual Refresh control |
+| 015 | planned | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
+| 016 | planned | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
 deferred; 012 styles only what has landed and tells those plans how to reuse its primitives.
+
+**015 and 016 are the first plans written from a real deployment rather than from the
+roadmap.** Homon went to its first production host on 2026-09-18 (`clockmaster`, rootless
+Docker, port 8102, reached over plain HTTP on the LAN) and both defects were found there, not
+in CI — 016 stopped the api container from starting at all, and 015 stops the administrator
+from holding a session once it does. **They should ship in one release**, because both change
+`compose.prod.yaml` and `deploy.sh` does not carry a compose change across (it pulls images and
+pins `HOMON_VERSION`, nothing more).
 
 **014 is executed but NOT merged.** It sits on the branch `plan/014-dashboard-auto-refresh`
 (worktree `.claude/worktrees/plan-014`, head `5e01612`, six commits), reviewed green on
@@ -66,6 +77,19 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   single-flight) and builds the cache from its own description if 010 has not landed.
 - **012 runs last**; its Slice A (tokens, fonts, theme bootstrap, toggle) depends only on
   001 and can land early.
+- **015 introduces `Auth:AllowPlainTextSessions`** (default `false`) and the
+  `$homon_forwarded_proto` allow-list map in `src/Homon.Web/nginx.conf`. The two changes are
+  coupled and ordered: nginx currently overwrites `X-Forwarded-Proto` with its own `$scheme`,
+  so relaxing the cookie policy on its own would strip `Secure` from the WAF-fronted path as
+  well as the LAN one. 015 also claims `docs/ARCHITECTURE.md` §3.21 (confirm at execution).
+- **015 is the first plan to boot a test host in `Production`.** `HomonApiFactory` forces
+  `Development`, and a Production host runs two extra validators — `Email:ResendApiToken` must
+  be non-empty and `Weather:Provider` must not be `Fake`. 015's derived factory supplies the
+  first; any later plan needing a Production host should reuse that shape rather than
+  rediscovering it.
+- **016 is independent of 015** but shares its release. Note that `compose.prod.yaml` on the
+  maintainer's host already carries 016's fix as a local edit, so that copy has diverged from
+  the repo until this lands.
 - Every module plan edits shared files (`Program.cs`, `HomonDbContext.cs`, the model
   snapshot, `App.tsx`, `dashboard-page.tsx`, `admin-home-page.tsx`, `e2e/helpers.ts`).
   Each tells its executor to compare only the regions it edits in the drift check.
