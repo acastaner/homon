@@ -465,10 +465,11 @@ network the web container reaches the api container from — that setting is wha
 forwarded-headers middleware on at all, unchanged by this plan.
 
 Only with that in place is it safe to let the cookie policy follow the request: a new flag,
-`Auth:AllowPlainTextSessions`, default `false`, changes `CookieAuthenticationOptions.Cookie.
-SecurePolicy` from unconditional `CookieSecurePolicy.Always` to `CookieSecurePolicy.
-SameAsRequest` when set (Development already used `SameAsRequest` unconditionally, and still
-does). Deliberately `SameAsRequest`, not a blanket `CookieSecurePolicy.None` — with nginx
+`Auth:AllowPlainTextSessions`, default `false`, changes
+`CookieAuthenticationOptions.Cookie.SecurePolicy` from unconditional
+`CookieSecurePolicy.Always` to `CookieSecurePolicy.SameAsRequest` when set (Development
+already used `SameAsRequest` unconditionally, and still does). Deliberately
+`SameAsRequest`, not a blanket `CookieSecurePolicy.None` — with nginx
 forwarding the real scheme, `SameAsRequest` is correct on *both* paths from one setting: a
 WAF-fronted request is seen as HTTPS and still receives a `Secure` cookie, while a plain-HTTP
 LAN request receives one the browser will actually store. `None` would give up the WAN
