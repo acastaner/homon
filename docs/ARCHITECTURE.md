@@ -491,6 +491,73 @@ network, so anyone who can sniff the LAN segment can replay the session — acce
 the alternative is no administration at all on that host, and retired by putting TLS on the
 plain-HTTP origin, at which point the flag is set back to `false` and nothing else changes.
 
+### 3.22 Collapsed dashboard sections live in this browser's local storage, and the heading is the control
+
+Plan 018 lets a reader fold any dashboard section away — one probe group, Links, Pages,
+Weather — and remembers the choice the next time that browser opens the dashboard. It was
+first asked for as a cookie; it shipped as `localStorage` instead
+(`src/Homon.Web/src/lib/collapsed-sections.ts`).
+
+**Why not the cookie that was asked for.** A cookie here has exactly the failure mode §3.21
+exists to fix: the SPA and the API are one origin in every deployment, and the production
+host serves the LAN over plain HTTP. `Secure` is what every cookie checklist tells you to
+add, and adding it here would make the feature pass every test and every HTTPS deployment
+while remembering nothing on the one dashboard a household actually uses — a silent failure,
+not a loud one, because the sign-in flow that motivated §3.21 has no equivalent for a display
+preference nobody is watching fail. Past that trap, a cookie would also ride on every
+`/status` poll (every 30 s) plus links, pages and weather, for a value no server-side code
+reads — the API reads only its own `homon.sid`. `src/Homon.Web/src/lib/theme.ts` already
+persists a per-browser display preference exactly this way, so this module is the same
+mechanism, not a new one. The one thing a cookie buys — a value the *server* can read — is
+worth nothing while Homon is a Vite SPA behind nginx serving a static bundle; if that
+changes, this module is the only thing that has to move.
+
+**The stored shape.** One key, `homon-collapsed-sections`, holding a JSON array of section
+ids — `["group-hosts","links"]` — parsed defensively (`JSON.parse` in a `try`/`catch`,
+anything that is not an array of non-empty strings discarded) because the read happens
+synchronously inside a `useState` initialiser, where a throw would blank the entire
+dashboard. A value written by an older version of this code, a newer one, or a curious reader
+with dev tools open all have to degrade to "everything expanded" rather than to an exception.
+Storing collapsed ids only, never expanded ones, means a first-ever visit, cleared site data,
+a private window and a brand-new probe group all behave identically — expanded — without a
+special case anywhere. Writing an empty set removes the key entirely rather than storing
+`[]`, so "never used" and "used, then everything re-expanded" look the same in dev tools, and
+the key's presence is itself a truthful signal the e2e suite asserts on directly. On write,
+the list is also capped at 50 ids and pruned against the section ids currently known to the
+page, so a deleted probe group's id cannot sit in storage forever.
+
+**The markup.** The toggle is a `<button>` *inside* the section's `<h2>`, and the button's
+text is the heading text and nothing else
+(`src/Homon.Web/src/components/collapsible-section.tsx`). That arrangement is forced by four
+assertions that were already green and had to stay green: `e2e/dashboard-groups.spec.ts`
+matches every level-2 heading's `textContent` exactly against the section names, so no count,
+suffix or `sr-only` span may live inside the `<h2>`; `dashboard-page.test.tsx` finds each
+section by the accessible name its heading supplies through `aria-labelledby`;
+`e2e/layout.spec.ts` needs the headings visible on the bare dashboard; and
+`e2e/refresh.spec.ts` runs a 40px tap-target check over *every* `<button>` on `/`, which a
+naive 12px-tall heading button would fail. The last of those is why the button carries
+`min-h-10 min-w-10` even though it costs the design brief's "section label sits 10px above
+its panel" — the tap-target floor is enforced by the gate, the 10px is enforced by nobody, so
+the floor wins. Collapse itself is the `hidden` attribute on a wrapper `<div>` that always
+exists (never a conditional render), because `aria-controls` has to point at a real element,
+and that wrapper takes no Tailwind display utility — `flex`/`grid`/`block` all beat
+`[hidden]`'s `display: none` and would leave a "collapsed" section still on screen.
+
+**No bootstrap script, unlike the theme.** `public/theme-bootstrap.js` exists because the
+theme has to be right before the very first paint or the page flashes the wrong scheme.
+Sections do not have that problem: nothing can render one before its data
+(`/status`, `/links`, …) has resolved anyway, and the stored ids are read synchronously in
+the `useCollapsedSections` initialiser, which runs before the first paint that could show a
+section at all. A second bootstrap script here would be solving a problem this feature does
+not have.
+
+**No server-side state.** This is a display preference, the same class of thing as the theme
+toggle, not a household setting — nothing changes under `src/Homon.Api/`,
+`src/Homon.Domain/` or `src/Homon.Infrastructure/`, and the API gains no new field or
+endpoint. Moving it server-side later, so every browser in a household opened the same
+arrangement, would be a different decision with its own migration, not an extension of this
+one.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.
