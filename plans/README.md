@@ -28,6 +28,7 @@ reviews and merges the work.
 | 014 | DONE (2026-09-18, `5e01612`) | M | — | Dashboard auto-refresh: the freshness indicator, focus refetch and a manual Refresh control |
 | 015 | DONE (2026-09-18, `2a78135`) | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
 | 016 | DONE (2026-09-18, `a8503ae`) | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
+| 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
@@ -115,8 +116,13 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   `src/Homon.Web/nginx.conf`. Anything that later touches the session cookie's `SecurePolicy`,
   the forwarded-headers block, or that map must read `docs/ARCHITECTURE.md` §3.21 first: the
   flag is only safe *because* nginx forwards the client's real scheme, and the two are a pair.
-- **016 also edits `compose.prod.yaml`** and is unexecuted; it and 015 touch different lines
-  and merge cleanly, but a release carrying one should carry both.
+- **016 also edits `compose.prod.yaml`**; it and 015 touched different lines and merged cleanly.
+  Both shipped in v0.1.1.
+- **017 is independent of everything** and touches only `deploy.sh` and the runbook. It exists
+  because the maintainer's host names its Compose file `compose.yaml`, which `deploy.sh` cannot
+  find, so the documented update path does not run there. Note what 017 deliberately does *not*
+  fix: `deploy.sh` still never carries a changed `compose.prod.yaml` onto the host. That is the
+  sharper problem — v0.1.1 changed that file twice — and it needs its own plan.
 - **015 introduces `Auth:AllowPlainTextSessions`** (default `false`) and the
   `$homon_forwarded_proto` allow-list map in `src/Homon.Web/nginx.conf`. The two changes are
   coupled and ordered: nginx currently overwrites `X-Forwarded-Proto` with its own `$scheme`,
