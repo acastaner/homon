@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
 
+import { CollapsibleSection } from '@/components/collapsible-section'
 import { Sparkline } from '@/components/sparkline'
 import { StatusChip } from '@/components/status-chip'
 import { ApiError } from '@/lib/api'
+import { useCollapsedSections } from '@/lib/collapsed-sections'
 import { formatUptime } from '@/lib/format-uptime'
 import { useLinks } from '@/lib/links'
 import { usePublishedPages } from '@/lib/pages'
-import { dashboardSections, formatCheckedAt, useStatus, type ProbeState } from '@/lib/status'
+import { dashboardSections, formatCheckedAt, summariseProbeStates, useStatus, type ProbeState } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 import {
   useWeather,
@@ -94,9 +96,6 @@ function formatForecastDay(date: string): string {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' })
 }
 
-/** `docs/design-brief.md`'s Section label rule: 12px/600/0.12em/uppercase, 10px above its panel. */
-const SECTION_LABEL = 'text-[12px] font-semibold uppercase tracking-[0.12em] text-muted'
-const SECTION_GAP = 'flex flex-col gap-[10px]'
 const PANEL = 'rounded-md border border-line bg-surface'
 
 /**
@@ -118,6 +117,14 @@ export function DashboardPage() {
   const { data: pages = [] } = usePublishedPages({ refetchInterval: 5 * 60 * 1000, refetchOnWindowFocus: true })
   const { data: weather, isError: isWeatherError, error: weatherError } = useWeather()
 
+  const { collapsed, toggle } = useCollapsedSections()
+
+  // Everything that can be a section, not only what is on screen right now: `pages` disappears
+  // entirely when no page is published, and pruning (lib/collapsed-sections.ts) must not forget
+  // a reader's choice just because the Pages section is temporarily absent. `null` until the
+  // status query has answered — see that module's comment for why pruning early is destructive.
+  const knownSectionIds = status.data === undefined ? null : [...sections.map((section) => section.id), 'links', 'pages', 'weather']
+
   return (
     <>
       <div className="flex flex-col gap-3 border-b border-line-strong pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
@@ -137,10 +144,14 @@ export function DashboardPage() {
         ) : null}
       </div>
       {sections.map((section) => (
-        <section key={section.id} aria-labelledby={section.headingId} className={SECTION_GAP}>
-          <h2 id={section.headingId} className={SECTION_LABEL}>
-            {section.heading}
-          </h2>
+        <CollapsibleSection
+          key={section.id}
+          headingId={section.headingId}
+          heading={section.heading}
+          collapsed={collapsed.has(section.id)}
+          onToggle={() => toggle(section.id, knownSectionIds)}
+          summary={summariseProbeStates(section.probes)}
+        >
           {section.probes.length === 0 ? (
             <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
               <p className="text-[13.5px] text-muted">
@@ -195,12 +206,14 @@ export function DashboardPage() {
               </table>
             </div>
           )}
-        </section>
+        </CollapsibleSection>
       ))}
-      <section aria-labelledby="links-heading" className={SECTION_GAP}>
-        <h2 id="links-heading" className={SECTION_LABEL}>
-          Links
-        </h2>
+      <CollapsibleSection
+        headingId="links-heading"
+        heading="Links"
+        collapsed={collapsed.has('links')}
+        onToggle={() => toggle('links', knownSectionIds)}
+      >
         {links.length === 0 ? (
           <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
             <p className="text-[13.5px] text-muted">
@@ -228,12 +241,14 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </section>
+      </CollapsibleSection>
       {pages.length > 0 ? (
-        <section aria-labelledby="pages-heading" className={SECTION_GAP}>
-          <h2 id="pages-heading" className={SECTION_LABEL}>
-            Pages
-          </h2>
+        <CollapsibleSection
+          headingId="pages-heading"
+          heading="Pages"
+          collapsed={collapsed.has('pages')}
+          onToggle={() => toggle('pages', knownSectionIds)}
+        >
           <ul className={`${PANEL} divide-y divide-line px-4`}>
             {pages.map((page) => (
               <li key={page.slug} className="py-2.5">
@@ -246,12 +261,14 @@ export function DashboardPage() {
               </li>
             ))}
           </ul>
-        </section>
+        </CollapsibleSection>
       ) : null}
-      <section aria-labelledby="weather-heading" className={SECTION_GAP}>
-        <h2 id="weather-heading" className={SECTION_LABEL}>
-          Weather{weather?.place ? ` · ${weather.place}` : ''}
-        </h2>
+      <CollapsibleSection
+        headingId="weather-heading"
+        heading={`Weather${weather?.place ? ` · ${weather.place}` : ''}`}
+        collapsed={collapsed.has('weather')}
+        onToggle={() => toggle('weather', knownSectionIds)}
+      >
         {weather === null ? (
           <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
             <p className="text-[13.5px] text-muted">
@@ -317,7 +334,7 @@ export function DashboardPage() {
             </p>
           </div>
         ) : null}
-      </section>
+      </CollapsibleSection>
     </>
   )
 }
