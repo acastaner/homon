@@ -154,7 +154,7 @@ export function summariseProbeStates(probes: readonly StatusProbe[]): string {
   }
 
   return [...counts.entries()]
-    .sort(([a], [b]) => PHONE_SEVERITY_ORDER[a] - PHONE_SEVERITY_ORDER[b])
+    .toSorted(([a], [b]) => PHONE_SEVERITY_ORDER[a] - PHONE_SEVERITY_ORDER[b])
     .map(([state, count]) => `${String(count)} ${state}`)
     .join(' · ')
 }
