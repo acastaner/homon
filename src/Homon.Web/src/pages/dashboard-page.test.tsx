@@ -1,6 +1,8 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
+import { COLLAPSED_SECTIONS_STORAGE_KEY, writeCollapsedSections } from '@/lib/collapsed-sections'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { renderWithProviders } from '@/test/render'
 import { stubFetch } from '@/test/fetch'
@@ -52,8 +54,13 @@ const twoLinks = {
   },
 }
 
+beforeEach(() => {
+  window.localStorage.clear()
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.localStorage.clear()
 })
 
 describe('DashboardPage', () => {
@@ -186,5 +193,44 @@ describe('DashboardPage', () => {
     const weather = await screen.findByRole('region', { name: 'Weather' })
 
     expect(await within(weather).findByText('Weather is temporarily unavailable.')).toBeInTheDocument()
+  })
+
+  it('sections start expanded and say so', async () => {
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    const hosts = await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(screen.getByRole('button', { name: 'Hosts' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(hosts).getByText('Shared device')).toBeVisible()
+  })
+
+  it('clicking a heading collapses it and writes the choice, per-section', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    await screen.findByRole('region', { name: 'Hosts' })
+    await user.click(screen.getByRole('button', { name: 'Hosts' }))
+
+    const hosts = screen.getByRole('region', { name: 'Hosts' })
+    expect(within(hosts).getByText('Shared device')).not.toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hosts' })).toHaveAttribute('aria-expanded', 'false')
+    expect(window.localStorage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY)).toBe('["group-hosts"]')
+
+    const storage = screen.getByRole('region', { name: 'Storage' })
+    expect(within(storage).getByText('Shared device')).toBeVisible()
+  })
+
+  it('a stored id collapses a section on first paint, with its summary', async () => {
+    writeCollapsedSections(['group-hosts'])
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    await screen.findByRole('region', { name: 'Storage' })
+
+    const hosts = screen.getByRole('region', { name: 'Hosts' })
+    expect(screen.getByRole('button', { name: 'Hosts' })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(hosts).getByText('1 up')).toBeVisible()
   })
 })
