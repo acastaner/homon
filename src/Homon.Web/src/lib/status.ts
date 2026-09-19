@@ -141,6 +141,25 @@ export function dashboardSections(status: Status | undefined, options: { phone: 
 }
 
 /**
+ * `1 down · 4 up` — what a collapsed probe section keeps in its header so that folding a group
+ * away cannot hide a service that is down. Worst state first (the order `PHONE_SEVERITY_ORDER`
+ * already encodes), zero counts omitted, `''` for a section with no probes. The `·` separator
+ * and the mono/muted treatment match the stat strip at the top of the dashboard.
+ */
+export function summariseProbeStates(probes: readonly StatusProbe[]): string {
+  const counts = new Map<ProbeState, number>()
+
+  for (const probe of probes) {
+    counts.set(probe.state, (counts.get(probe.state) ?? 0) + 1)
+  }
+
+  return [...counts.entries()]
+    .sort(([a], [b]) => PHONE_SEVERITY_ORDER[a] - PHONE_SEVERITY_ORDER[b])
+    .map(([state, count]) => `${String(count)} ${state}`)
+    .join(' · ')
+}
+
+/**
  * A plain relative string for `LastCheckedAt` — `'Never'` when the probe has not been polled,
  * otherwise `"N min ago"` under an hour and `"N h ago"` beyond it. Deliberately unstyled and
  * imprecise; plan 012's Decision 6 may replace it with something nicer.

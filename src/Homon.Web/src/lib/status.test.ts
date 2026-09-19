@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dashboardSections, formatCheckedAt, type Status, type StatusProbe } from '@/lib/status'
+import { dashboardSections, formatCheckedAt, summariseProbeStates, type Status, type StatusProbe } from '@/lib/status'
 
 function makeProbe(overrides: Partial<StatusProbe> & { id: string }): StatusProbe {
   return {
@@ -135,5 +135,35 @@ describe('formatCheckedAt', () => {
 
   it('reads "N h ago" beyond an hour', () => {
     expect(formatCheckedAt(new Date('2026-01-01T10:00:00Z').toISOString(), now)).toBe('2 h ago')
+  })
+})
+
+describe('summariseProbeStates', () => {
+  it('returns an empty string for a section with no probes', () => {
+    expect(summariseProbeStates([])).toBe('')
+  })
+
+  it('puts the worst state first regardless of input order', () => {
+    const probes = [
+      makeProbe({ id: 'up-1', state: 'up' }),
+      makeProbe({ id: 'up-2', state: 'up' }),
+      makeProbe({ id: 'up-3', state: 'up' }),
+      makeProbe({ id: 'up-4', state: 'up' }),
+      makeProbe({ id: 'down-1', state: 'down' }),
+    ]
+
+    expect(summariseProbeStates(probes)).toBe('1 down · 4 up')
+  })
+
+  it('lists every state once, worst first', () => {
+    const probes = [
+      makeProbe({ id: 'down-1', state: 'down' }),
+      makeProbe({ id: 'unstable-1', state: 'unstable' }),
+      makeProbe({ id: 'unknown-1', state: 'unknown' }),
+      makeProbe({ id: 'up-1', state: 'up' }),
+      makeProbe({ id: 'paused-1', state: 'paused' }),
+    ]
+
+    expect(summariseProbeStates(probes)).toBe('1 down · 1 unstable · 1 unknown · 1 up · 1 paused')
   })
 })
