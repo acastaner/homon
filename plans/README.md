@@ -4,6 +4,34 @@ Numbered in one monotonic sequence; a number is never reused. Each plan is a fil
 `NNN-short-imperative-title.md` and records what it changed and what it decided; the
 decisions themselves live in `docs/ARCHITECTURE.md`.
 
+**018 is merged.** `main` carries it as `ead406e`, fast-forwarded from `9d70023` on
+2026-09-21. Before the merge the reviewer re-ran all three suites on the branch independently
+rather than trusting the executor's report: `web` → `PASS`, 93 tests (76 before, +17 new);
+`api` → `PASS`, 287 passed, 0 skipped; `e2e` → `PASS`, 75 (67 before, +4 new tests × 2 viewport
+projects). `oxlint` is silent. The diff was exactly the ten in-scope files, nothing under
+`src/Homon.Api/`, `src/Homon.Domain/`, `src/Homon.Infrastructure/` or `tests/Homon.Api.Tests/`,
+and the five "net" specs (`dashboard-groups`, `refresh`, `layout`, `contrast`, `helpers`) were
+byte-identical to `main` — the tests were not bent to fit the change. One revision round was
+required, against a defect in the plan rather than in the execution: the plan's snippet for
+`summariseProbeStates` specified `.sort(`, which was the repo's only lint warning and sat 21
+lines below a correct `.toSorted()` in the same file; `ead406e` fixes it.
+
+**018 was executed in a worktree, and that is now forbidden.** The maintainer could not
+manually test the feature after it was reported done, because the worktree held the only copy
+— `main` and this checkout had none of it. `CLAUDE.md`'s "Where the work happens" section is
+the rule that came out of it: work in this checkout, on a feature branch, and leave that branch
+checked out for review. Every plan's "Git workflow" section that says otherwise is void.
+
+Plan 018 was written on 2026-09-19 against commit `9d70023`, from a maintainer request
+rather than from the roadmap: collapse any dashboard section, remembered per browser. It was
+first specified with a cookie, as asked, and revised the same day to `localStorage` — a cookie
+on this deployment carries a silent failure mode (a `Secure` attribute drops it on the
+plain-HTTP LAN of §3.21) and rides on every `/status` poll for a value no server code reads;
+`lib/theme.ts` already persists a per-browser preference the same way. See the plan's D1. It is
+SPA-only and touches no API, but it is the first change to reshape the dashboard's section
+markup since plan 012, so it carries an unusually long list of existing assertions it must not
+break — see its "The four existing assertions that constrain the markup".
+
 Plans 015–016 were written on 2026-09-18 against commit `5ff263a`, from defects found on the
 first production deployment; both were reviewed on 2026-09-18 (`Reviewed:` line in each). Plans 002–013 were written on 2026-09-15 against commit `f4e7261`; 002, 003, 006, 007,
 010, 012 and 013 were then reviewed cold (`Reviewed:` line in each). Each plan opens with a
@@ -29,6 +57,7 @@ reviews and merges the work.
 | 015 | DONE (2026-09-18, `2a78135`) | M | — | LAN-first sign-in: honour a forwarded scheme in nginx, and let the session cookie follow it |
 | 016 | DONE (2026-09-18, `a8503ae`) | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 | 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
+| 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are

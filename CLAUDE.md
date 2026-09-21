@@ -9,6 +9,34 @@ calendar, backup reports). Open source, MIT, and **generic**: nothing about any 
 household may be hard-coded. `README.md` is the front door; `docs/ARCHITECTURE.md` is the
 decision record; `docs/MODULES.md` is the roadmap.
 
+## Where the work happens — two hard rules
+
+**Never create a git worktree.** This is a single-developer project; there is no concurrency
+to isolate and nothing to protect the main checkout from. What a worktree does buy is a copy
+of the repository the maintainer is *not* sitting in — its own directory, its own
+`node_modules`, its own dev server — so the obvious way to check a change ("run it and click
+it") silently exercises the unchanged main checkout instead, and the mistake only surfaces
+after the work has been reported done. That is exactly how plan 018 was reported complete,
+with a green gate, while `npm run dev` in this directory still had none of it (2026-09-21).
+Do the work here, in `/home/acastaner/Git/homon`, where running the app tests what was just
+changed. This covers the Agent tool's `isolation: "worktree"` as much as `git worktree add`
+by hand — a dispatched executor works in this checkout or not at all.
+
+**Cut a branch for a new feature, then stay on it.** Creating a branch for a new piece of
+work is expected — do it without asking, named the way `git log` already names them
+(`plan/018-collapsible-sections`). What needs permission is *leaving* it: do not switch back
+to `main`, do not merge, do not delete a branch, and do not `git stash`. The maintainer
+reviews by running the app in this checkout, on that branch, by hand — switching away swaps
+out the very thing they are about to test, which is the worktree failure above wearing a
+different hat. Finishing a piece of work therefore means leaving its branch checked out and
+saying so. Merging, pushing and cleanup come after the manual review, on the maintainer's
+word.
+
+A plan's own "Git workflow" section does **not** override the worktree rule. Plans numbered
+014–018 tell the executor to create a worktree; that part is void. Their branch instruction
+is fine — just leave the branch checked out here when the work is done, rather than merging
+or switching back.
+
 ## Repository state
 
 **Phase 0 — scaffolding — is complete and the gate is green** (`./ci/run-ci.sh` →
