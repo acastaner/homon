@@ -815,7 +815,7 @@ scripts" paragraph is stale and joins the docs step.
 
 ## Execution notes (2026-10-01, branch `plan/021-message-gateway`)
 
-**All three suites pass, one at a time, with 0 skips**: `web` (167 vitest), `api` (475 xunit),
+**All three suites pass, one at a time, with 0 skips**: `web` (167 vitest), `api` (453 xunit, 0 skipped),
 `e2e` (113 Playwright across both viewports, run twice to check the one timing-sensitive
 assertion). The combined `./ci/run-ci.sh` was not used, per this machine's known abort.
 
