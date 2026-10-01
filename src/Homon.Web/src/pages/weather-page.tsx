@@ -277,7 +277,9 @@ function HourlySection({
                 <th scope="col" className={`hidden w-[104px] sm:table-cell ${TH} text-right`}>
                   Feels like
                 </th>
-                <th scope="col" className={`hidden w-[128px] sm:table-cell ${TH}`}>
+                {/* Wide enough for "12 km/h · gusts 94" on one line: a tinted row that wraps
+                    is taller than its neighbours, and the table stops reading as a table. */}
+                <th scope="col" className={`hidden w-[200px] sm:table-cell ${TH}`}>
                   Wind
                 </th>
                 <th scope="col" className={`w-[72px] ${TH} text-right`}>
@@ -288,7 +290,11 @@ function HourlySection({
             <tbody>
               {shown.map((hour) => {
                 const Icon = weatherConditionIcon(hour.condition)
-                const severity = hourSeverity(hour, warnings)
+                const covering = hourWarnings(hour, warnings)
+                const severity = worst(covering)
+                // Only a *wind* advisory may colour the wind cell — a thunderstorm advisory
+                // tinting the row must not turn a calm 12 km/h red.
+                const windSeverity = worst(covering.filter((warning) => warning.kind === 'wind'))
 
                 return (
                   <tr key={`${hour.date}-${hour.time}`} className={`min-h-12 border-t border-line ${severityTint(severity)}`}>
@@ -303,8 +309,14 @@ function HourlySection({
                     <td className={`mono hidden sm:table-cell ${TD} text-right text-[14px]`}>
                       {Math.round(hour.apparentTemperature)}°
                     </td>
-                    <td className={`mono hidden sm:table-cell ${TD} text-[14px] ${severityText(severity)}`}>
+                    <td className={`mono hidden whitespace-nowrap sm:table-cell ${TD} text-[14px] ${severityText(windSeverity)}`}>
+                      {/* The advisory is about the gust, so the gust is what the coloured cell
+                          has to show — otherwise a reader sees a calm mean wind in red and the
+                          banner and the table appear to disagree. */}
                       {Math.round(hour.windSpeed)} {windUnit(units)}
+                      {windSeverity && hour.windGusts != null
+                        ? ` · gusts ${String(Math.round(hour.windGusts))}`
+                        : ''}
                     </td>
                     <td className={`mono ${TD} text-right text-[14px]`}>
                       {hour.precipitationProbability == null ? NO_VALUE : `${hour.precipitationProbability}%`}
@@ -375,7 +387,12 @@ function DailySection({
             <tbody>
               {days.map((day) => {
                 const Icon = weatherConditionIcon(day.condition)
-                const severity = daySeverity(day, warnings)
+                const covering = dayWarnings(day, warnings)
+                const severity = worst(covering)
+                // Likewise: a heat advisory must not colour the rain figure.
+                const rainSeverity = worst(
+                  covering.filter((warning) => warning.kind === 'rain' || warning.kind === 'snow'),
+                )
 
                 return (
                   <tr key={day.date} className={`min-h-12 border-t border-line ${severityTint(severity)}`}>
@@ -391,7 +408,7 @@ function DailySection({
                     <td className={`mono ${TD} text-right text-[14px]`}>
                       {Math.round(day.high)}° / {Math.round(day.low)}°
                     </td>
-                    <td className={`mono hidden sm:table-cell ${TD} text-right text-[14px] ${severityText(severity)}`}>
+                    <td className={`mono hidden sm:table-cell ${TD} text-right text-[14px] ${severityText(rainSeverity)}`}>
                       {day.precipitationSum == null
                         ? NO_VALUE
                         : `${round1(day.precipitationSum)} ${precipitationUnit(units)}`}
@@ -445,9 +462,15 @@ function severityText(severity: WeatherWarningSeverity | null): string {
   }
 }
 
-/** The worst advisory covering this hour, so the row carries the same tint as the banner. */
-function hourSeverity(hour: WeatherHour, warnings: WeatherWarning[]): WeatherWarningSeverity | null {
-  const covering = warnings.filter(
+/**
+ * The advisories covering this hour, so the row carries the same tint as the banner — and so a
+ * cell can ask whether the advisory colouring it is about *its own* figure.
+ *
+ * The clock comparison is a plain string compare, which is correct for zero-padded `"HH:mm"`
+ * and is why that format is the wire contract.
+ */
+function hourWarnings(hour: WeatherHour, warnings: WeatherWarning[]): WeatherWarning[] {
+  return warnings.filter(
     (warning) =>
       warning.date === hour.date &&
       warning.fromTime != null &&
@@ -455,13 +478,11 @@ function hourSeverity(hour: WeatherHour, warnings: WeatherWarning[]): WeatherWar
       warning.fromTime <= hour.time &&
       hour.time <= warning.toTime,
   )
-
-  return worst(covering)
 }
 
-/** The worst whole-day advisory for this day. Timed advisories tint their hours, not the day. */
-function daySeverity(day: WeatherDay, warnings: WeatherWarning[]): WeatherWarningSeverity | null {
-  return worst(warnings.filter((warning) => warning.date === day.date && warning.fromTime == null))
+/** The whole-day advisories for this day. Timed advisories tint their hours, not the day. */
+function dayWarnings(day: WeatherDay, warnings: WeatherWarning[]): WeatherWarning[] {
+  return warnings.filter((warning) => warning.date === day.date && warning.fromTime == null)
 }
 
 function worst(warnings: WeatherWarning[]): WeatherWarningSeverity | null {

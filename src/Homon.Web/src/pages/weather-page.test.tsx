@@ -175,6 +175,50 @@ describe('WeatherPage', () => {
     expect(within(items[1]).getByText(/28 mm of rain forecast/)).toBeInTheDocument()
   })
 
+  it('shows the gust in the wind cell it colours, not the mean wind', async () => {
+    render({
+      ...weatherBody,
+      hourly: [hour('13:00', { windSpeed: 12, windGusts: 94 }), hour('14:00', { windSpeed: 12, windGusts: 20 })],
+      warnings: [
+        { kind: 'wind', severity: 'severe', value: 94, date: '2026-01-01', fromTime: '13:00', toTime: '13:00' },
+      ],
+    })
+
+    const body = within(await screen.findByRole('table', { name: 'Hourly forecast' })).getAllByRole(
+      'rowgroup',
+    )[1]
+    const rows = within(body).getAllByRole('row')
+
+    // The advisory is about the gust, so the coloured cell has to show the gust — otherwise a
+    // reader sees a calm 12 km/h in red and the banner and the table appear to disagree.
+    expect(within(rows[0]).getByText(/12 km\/h · gusts 94/)).toBeInTheDocument()
+
+    // The untouched hour keeps the plain mean.
+    expect(within(rows[1]).getByText('12 km/h')).toBeInTheDocument()
+  })
+
+  it('does not let one kind of advisory colour another kind of figure', async () => {
+    render({
+      ...weatherBody,
+      hourly: [hour('13:00', { windSpeed: 12, windGusts: 20 })],
+      forecast: [day('2026-01-02', 'clear', 35, 20, { precipitationSum: 1 })],
+      warnings: [
+        // A thunderstorm covering the hour, and a heat advisory covering the day. Neither is
+        // about wind or rain, so neither may colour the wind or rain cell.
+        { kind: 'thunderstorm', severity: 'severe', value: null, date: '2026-01-01', fromTime: '13:00', toTime: '13:00' },
+        { kind: 'heat', severity: 'caution', value: 35, date: '2026-01-02', fromTime: null, toTime: null },
+      ],
+    })
+
+    const hourly = within(await screen.findByRole('table', { name: 'Hourly forecast' })).getAllByRole(
+      'rowgroup',
+    )[1]
+    expect(within(hourly).getByText('12 km/h')).not.toHaveClass('text-down')
+
+    const daily = within(screen.getByRole('table', { name: 'Daily forecast' })).getAllByRole('rowgroup')[1]
+    expect(within(daily).getByText('1 mm')).not.toHaveClass('text-unstable')
+  })
+
   it('renders no advisory list when nothing trips', async () => {
     render()
 
