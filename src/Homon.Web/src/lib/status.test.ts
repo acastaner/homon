@@ -51,7 +51,7 @@ describe('dashboardSections', () => {
     expect(sections.map((s) => s.heading)).toEqual(['Hosts', 'Other'])
   })
 
-  it('omits the ungrouped section label entirely when there is nothing ungrouped, but still renders it', () => {
+  it('drops the empty ungrouped section once a group exists', () => {
     const status = makeStatus({
       probes: [makeProbe({ id: 'a' })],
       groups: [{ id: 'g1', name: 'Hosts', probeIds: ['a'] }],
@@ -60,8 +60,21 @@ describe('dashboardSections', () => {
 
     const sections = dashboardSections(status, { phone: false })
 
-    expect(sections).toHaveLength(2)
-    expect(sections[1]).toMatchObject({ heading: 'Other', probes: [] })
+    expect(sections).toEqual([
+      { id: 'g1', headingId: 'probe-group-g1-heading', heading: 'Hosts', probes: [status.probes[0]] },
+    ])
+  })
+
+  it('drops the ungrouped section when its only id resolves to no probe', () => {
+    const status = makeStatus({
+      probes: [makeProbe({ id: 'a' })],
+      groups: [{ id: 'g1', name: 'Hosts', probeIds: ['a'] }],
+      ungroupedProbeIds: ['gone'],
+    })
+
+    const sections = dashboardSections(status, { phone: false })
+
+    expect(sections.map((s) => s.heading)).toEqual(['Hosts'])
   })
 
   it('a group heading id is derived from the group id, never the name', () => {

@@ -95,8 +95,14 @@ const PHONE_SEVERITY_ORDER: Record<ProbeState, number> = {
 /**
  * One section per non-empty group (in group order), then the ungrouped section — labelled
  * "Services" when it is the only section shown, "Other" otherwise (plan 002's Decision 7).
- * With zero probes and zero groups this still returns one "Services" section, so the
- * dashboard's existing empty sentence renders unchanged.
+ *
+ * The ungrouped section appears only when something is actually ungrouped, or when there are no
+ * groups at all (plan 019). The API already refuses to send a group with no members
+ * (`StatusEndpoints.cs`'s `.Where(g => g.Members.Count > 0)`), so an empty section is not a
+ * section anywhere else in this dashboard, and an empty "Other" sitting beside real groups renders
+ * a heading plus a "No probes yet" panel that is simply false. With zero probes AND zero groups it
+ * is still returned, labelled "Services" — that one IS the bare install's onboarding hint, and
+ * `e2e/layout.spec.ts` asserts it.
  *
  * On phone, each section's rows are sorted by severity (down, unstable, unknown, up, paused)
  * with a stable sort, so a family scanning a narrow screen sees the worst news first; desktop
@@ -120,12 +126,18 @@ export function dashboardSections(status: Status | undefined, options: { phone: 
     probes: resolve(group.probeIds),
   }))
 
-  sections.push({
-    id: 'ungrouped',
-    headingId: 'services-heading',
-    heading: groups.length === 0 ? 'Services' : 'Other',
-    probes: resolve(ungroupedIds),
-  })
+  // Tests the RESOLVED probes, not `ungroupedIds.length`: `resolve` drops an id with no matching
+  // probe, so a stale id in the payload would otherwise keep an empty section alive.
+  const ungrouped = resolve(ungroupedIds)
+
+  if (ungrouped.length > 0 || groups.length === 0) {
+    sections.push({
+      id: 'ungrouped',
+      headingId: 'services-heading',
+      heading: groups.length === 0 ? 'Services' : 'Other',
+      probes: ungrouped,
+    })
+  }
 
   if (!options.phone) {
     return sections
