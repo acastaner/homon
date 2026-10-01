@@ -75,10 +75,11 @@ export interface ProbeInput {
   name: string
   host: string
   /**
-   * `'ping'` or `'http'` — the only kinds this phase accepts on create. Ignored by `PUT`
-   * (kind is immutable after creation).
+   * `'ping'`, `'http'` or `'message'` — the kinds this phase accepts on create. Ignored by `PUT`
+   * (kind is immutable after creation). For `'message'`, `host` is the identifier of the reporter
+   * the probe watches, not a name on the network (plan 021).
    */
-  kind: 'ping' | 'http'
+  kind: 'ping' | 'http' | 'message'
   pollIntervalSeconds: number
   /** Omitted on create defaults server-side to `Probe.DefaultFailureThreshold`; required on update. */
   failureThreshold?: number

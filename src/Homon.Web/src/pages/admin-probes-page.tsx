@@ -13,17 +13,19 @@ import {
   type HttpProbeOptionsInput,
   type Probe,
 } from '@/lib/probes'
+import { useReporters } from '@/lib/reporters'
 import type { ProbeKind } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 /** Every kind the create form offers today — `smb`/`snmp` arrive with plans 004/005. */
-const CREATABLE_KINDS: readonly ('ping' | 'http')[] = ['ping', 'http']
+const CREATABLE_KINDS: readonly ('ping' | 'http' | 'message')[] = ['ping', 'http', 'message']
 
 const KIND_LABELS: Record<ProbeKind, string> = {
   ping: 'Ping (ICMP)',
   http: 'HTTP/HTTPS',
   smb: 'SMB/CIFS',
   snmp: 'SNMP',
+  message: 'Message (a reporter pushes to us)',
 }
 
 const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
@@ -170,7 +172,9 @@ function ProbeForm({
   // Kind is only ever chosen on the create form — a probe's kind cannot change after
   // creation (ProbeEndpoints ignores it on PUT), so the edit form renders it as text below
   // instead of this state. Unused while editing.
-  const [kind, setKind] = useState<'ping' | 'http'>(probe?.kind === 'http' ? 'http' : 'ping')
+  const [kind, setKind] = useState<'ping' | 'http' | 'message'>(
+    probe?.kind === 'http' || probe?.kind === 'message' ? probe.kind : 'ping',
+  )
 
   // HTTP fieldset state — seeded from the probe's own options when editing an HTTP probe,
   // otherwise the domain's own defaults (HttpProbeOptions.cs). Harmless to hold even when
@@ -206,6 +210,12 @@ function ProbeForm({
 
   const mutation = isEditing ? updateProbe : createProbe
   const isHttp = isEditing ? probe.kind === 'http' : kind === 'http'
+  const isMessage = isEditing ? probe.kind === 'message' : kind === 'message'
+
+  // Only fetched while the form is actually offering reporters: src/test/fetch.ts throws on an
+  // undeclared path, so an unconditional query here would force every existing probe-page test
+  // to declare /api/v1/reporters. See useReporters' own comment.
+  const reporters = useReporters({ enabled: isMessage })
   const showSecretInput = credentialType !== 'none' && (!hasStoredSecret || replaceCredential)
 
   function toggleGroup(id: string) {
@@ -314,19 +324,63 @@ function ProbeForm({
           className={FIELD_INPUT}
         />
       </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="probe-host" className={FIELD_LABEL}>
-          Host
-        </label>
-        <input
-          id="probe-host"
-          name="host"
-          required
-          value={host}
-          onChange={(event) => setHost(event.target.value)}
-          className={FIELD_INPUT}
-        />
-      </p>
+      {/*
+        A message probe adds no per-kind fieldset, unlike 003/004/005 — it has no options at all,
+        because what it watches is a reporter and when it next expects to hear from it is the
+        reporter's own business. What it replaces instead is this control: `Probe.Host` holds the
+        reporter's identifier (plan 021's Decision 3), which the API validates against an existing
+        reporter, so a free-text field here would be a way to typo a probe into permanent Unknown.
+        Any later kind whose host is a chosen thing rather than a typed one follows this shape.
+      */}
+      {isMessage ? (
+        reporters.data?.length ? (
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-host" className={FIELD_LABEL}>
+              Reporter
+            </label>
+            <select
+              id="probe-host"
+              name="host"
+              required
+              value={host}
+              onChange={(event) => setHost(event.target.value)}
+              className={FIELD_INPUT}
+            >
+              <option value="">Choose a reporter</option>
+              {reporters.data.map((reporter) => (
+                <option key={reporter.id} value={reporter.identifier}>
+                  {reporter.name}
+                </option>
+              ))}
+            </select>
+          </p>
+        ) : (
+          <p className="text-[14px] text-muted">
+            No reporters yet.{' '}
+            <Link
+              to="/admin/reporters"
+              className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+            >
+              Add a reporter
+            </Link>{' '}
+            before adding a message probe.
+          </p>
+        )
+      ) : (
+        <p className="flex flex-col gap-1">
+          <label htmlFor="probe-host" className={FIELD_LABEL}>
+            Host
+          </label>
+          <input
+            id="probe-host"
+            name="host"
+            required
+            value={host}
+            onChange={(event) => setHost(event.target.value)}
+            className={FIELD_INPUT}
+          />
+        </p>
+      )}
       {isEditing ? (
         <p className="text-[14px] text-muted">Kind: {KIND_LABELS[probe.kind]} — cannot be changed after creation.</p>
       ) : (
@@ -338,7 +392,7 @@ function ProbeForm({
             id="probe-kind"
             name="kind"
             value={kind}
-            onChange={(event) => setKind(event.target.value as 'ping' | 'http')}
+            onChange={(event) => setKind(event.target.value as 'ping' | 'http' | 'message')}
             className={FIELD_INPUT}
           >
             {CREATABLE_KINDS.map((option) => (

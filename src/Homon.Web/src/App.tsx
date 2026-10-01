@@ -21,6 +21,9 @@ const AdminPagesPage = lazy(() => import('@/pages/admin-pages-page').then((m) =>
 const AdminPageEditorPage = lazy(() =>
   import('@/pages/admin-page-editor-page').then((m) => ({ default: m.AdminPageEditorPage })),
 )
+const AdminReportersPage = lazy(() =>
+  import('@/pages/admin-reporters-page').then((m) => ({ default: m.AdminReportersPage })),
+)
 const AdminApiKeysPage = lazy(() => import('@/pages/admin-api-keys-page').then((m) => ({ default: m.AdminApiKeysPage })))
 const AdminWeatherPage = lazy(() => import('@/pages/admin-weather-page').then((m) => ({ default: m.AdminWeatherPage })))
 
@@ -58,6 +61,7 @@ export default function App() {
           <Route path="pages" element={<AdminPagesPage />} />
           <Route path="pages/new" element={<AdminPageEditorPage />} />
           <Route path="pages/:id" element={<AdminPageEditorPage />} />
+          <Route path="reporters" element={<AdminReportersPage />} />
           <Route path="api-keys" element={<AdminApiKeysPage />} />
           <Route path="weather" element={<AdminWeatherPage />} />
         </Route>

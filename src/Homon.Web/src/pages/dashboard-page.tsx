@@ -10,6 +10,7 @@ import { useCollapsedSections } from '@/lib/collapsed-sections'
 import { formatUptime } from '@/lib/format-uptime'
 import { useLinks } from '@/lib/links'
 import { usePublishedPages } from '@/lib/pages'
+import { MESSAGE_STATUS_WORD } from '@/lib/reporters'
 import { orderSections, useSectionOrder } from '@/lib/section-order'
 import {
   dashboardSections,
@@ -18,6 +19,7 @@ import {
   useStatus,
   type DashboardSection,
   type ProbeState,
+  type StatusProbe,
 } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 import {
@@ -178,10 +180,31 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
           {section.probes.map((probe) => (
             <tr key={probe.id} className={`min-h-12 border-t border-line ${rowStateClassName(probe.state)}`}>
               <td className="px-4 py-3">
-                <StatusChip state={probe.state} />
+                {/*
+                  A message probe borrows the chip's glyphs and colours under the vocabulary
+                  docs/design-brief.md set aside for backup outcomes — Succeeded / Warning / Failed
+                  — via the `word` prop that component has been carrying for exactly this since
+                  plan 012. The word comes from what the reporter claimed, not from the colour: a
+                  reporter that claimed nothing has "Reported" to say for itself, not "Succeeded".
+                */}
+                <StatusChip state={probe.state} word={messageChipWord(probe)} />
               </td>
               <td className="px-4 py-3 text-[15px] font-semibold">{probe.name}</td>
-              <td className={`px-4 py-3 text-[14px] ${detailClassName(probe.state)}`}>{probe.detail ?? ''}</td>
+              <td className={`px-4 py-3 text-[14px] ${detailClassName(probe.state)}`}>
+                {probe.detail ?? ''}
+                {/*
+                  The reporter's own words, and only when its reporter is reader-visible — the
+                  server sends null otherwise and caps what it does send at 2000 characters (plan
+                  021, Decision 11). No colour of its own: it inherits the cell's, so this adds no
+                  new text-on-tint pair for e2e/contrast.spec.ts to police. Clamped to three lines
+                  because even 2000 characters would make one row taller than the panel.
+                */}
+                {probe.message?.body != null ? (
+                  <span className="mt-1 block line-clamp-3 break-words whitespace-pre-wrap text-[13px]">
+                    {probe.message.body}
+                  </span>
+                ) : null}
+              </td>
               <td className="mono px-4 py-3 text-right text-[14px]">{formatUptime(probe.uptimePercent)}</td>
               <td className="px-4 py-3">
                 {probe.kind === 'ping' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
@@ -193,6 +216,20 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
       </table>
     </div>
   )
+}
+
+/**
+ * The chip word for a message probe, or undefined for every other kind — which leaves
+ * `StatusChip` to its own up/unstable/down vocabulary. Overdue is called out by name rather than
+ * left as "Failed": "Overdue" is the difference between a backup that ran and failed and one that
+ * never ran at all, and it is the first thing a reader wants to know.
+ */
+function messageChipWord(probe: StatusProbe): string | undefined {
+  if (probe.kind !== 'message' || probe.message === null) {
+    return undefined
+  }
+
+  return probe.message.overdue ? 'Overdue' : MESSAGE_STATUS_WORD[probe.message.status]
 }
 
 /** The weather panel and its four states: not configured, temporarily unavailable, loaded, loading. */

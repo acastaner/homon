@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { apiFetch } from '@/lib/api'
+import type { MessageStatus } from '@/lib/reporters'
 
 /** Mirrors ProbeKind in Homon.Domain/Monitoring/ProbeKind.cs. */
-export type ProbeKind = 'ping' | 'http' | 'smb' | 'snmp'
+export type ProbeKind = 'ping' | 'http' | 'smb' | 'snmp' | 'message'
 
 /** Mirrors ProbeStatus in Homon.Domain/Monitoring/ProbeStatus.cs. */
 export type ProbeState = 'unknown' | 'up' | 'unstable' | 'down' | 'paused'
@@ -18,6 +19,17 @@ export interface StatusTotals {
   uptimePercent: number | null
 }
 
+/**
+ * Mirrors ProbeMessageResponse in Homon.Api/Endpoints/StatusEndpoints.cs. Present only on a
+ * `message` probe whose reporter has reported at least once; `body` is null unless that reporter
+ * is reader-visible, and is capped server-side at 2000 characters.
+ */
+export interface StatusProbeMessage {
+  status: MessageStatus
+  overdue: boolean
+  body: string | null
+}
+
 /** Mirrors ProbeStatusResponse in Homon.Api/Endpoints/StatusEndpoints.cs. */
 export interface StatusProbe {
   id: string
@@ -28,6 +40,7 @@ export interface StatusProbe {
   lastCheckedAt: string | null
   uptimePercent: number | null
   sparkline: number[]
+  message: StatusProbeMessage | null
 }
 
 /** Mirrors ProbeGroupSummary in Homon.Api/Endpoints/StatusEndpoints.cs. */

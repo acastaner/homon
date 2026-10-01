@@ -18,6 +18,7 @@ export function AdminHomePage() {
             { to: '/admin/probe-groups', label: 'Probe groups' },
             { to: '/admin/links', label: 'Links' },
             { to: '/admin/pages', label: 'Pages' },
+            { to: '/admin/reporters', label: 'Reporters' },
             { to: '/admin/api-keys', label: 'API keys' },
             { to: '/admin/weather', label: 'Weather' },
           ].map((item) => (

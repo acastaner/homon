@@ -11,6 +11,7 @@ function makeProbe(overrides: Partial<StatusProbe> & { id: string }): StatusProb
     lastCheckedAt: null,
     uptimePercent: null,
     sparkline: [],
+    message: null,
     ...overrides,
   }
 }

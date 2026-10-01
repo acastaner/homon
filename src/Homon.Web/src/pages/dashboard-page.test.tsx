@@ -87,6 +87,43 @@ const twoLinks = {
   },
 }
 
+/**
+ * One message probe, which is what plan 021 added to this payload: the chip word comes from what
+ * the reporter claimed and the body is present only because its reporter is reader-visible.
+ */
+function statusWithAMessageProbe(message: {
+  status: string
+  overdue: boolean
+  body: string | null
+}) {
+  return {
+    '/api/v1/status': {
+      body: {
+        totals: { up: 1, unstable: 0, down: 0, unknown: 0, paused: 0, uptimePercent: 100 },
+        probes: [
+          {
+            id: 'probe-9',
+            name: 'Clockmaster backup',
+            kind: 'message',
+            state: message.overdue || message.status === 'failure' ? 'down' : 'up',
+            detail: 'message: success, reported 2026-10-01 04:30Z',
+            lastCheckedAt: null,
+            uptimePercent: 100,
+            sparkline: [],
+            message,
+          },
+        ],
+        groups: [],
+        ungroupedProbeIds: ['probe-9'],
+        generatedAt: '2026-01-01T00:00:00Z',
+      },
+    },
+    '/api/v1/links': { body: [] },
+    '/api/v1/pages': { body: [] },
+    '/api/v1/weather': { status: 204 },
+  }
+}
+
 beforeEach(() => {
   window.localStorage.clear()
 })
@@ -482,5 +519,42 @@ describe('DashboardPage', () => {
 
     expect(window.localStorage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY)).toBeNull()
     expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).not.toBeNull()
+  })
+
+  it('a message probe reads in the reporter vocabulary and shows a reader-visible body', async () => {
+    stubFetch(statusWithAMessageProbe({ status: 'success', overdue: false, body: 'NAS array healthy, 0 errors' }))
+
+    renderWithProviders(<DashboardPage />)
+
+    expect(await screen.findByText('Clockmaster backup')).toBeInTheDocument()
+    expect(screen.getByText('Succeeded')).toBeInTheDocument()
+    expect(screen.getByText('NAS array healthy, 0 errors')).toBeInTheDocument()
+  })
+
+  it('a reporter that claimed nothing reads Reported rather than Succeeded', async () => {
+    stubFetch(statusWithAMessageProbe({ status: 'none', overdue: false, body: null }))
+
+    renderWithProviders(<DashboardPage />)
+
+    expect(await screen.findByText('Reported')).toBeInTheDocument()
+  })
+
+  it('an overdue reporter reads Overdue rather than Failed', async () => {
+    // A backup that never ran is a different fact from one that ran and failed, and it is the one
+    // a reader wants first.
+    stubFetch(statusWithAMessageProbe({ status: 'success', overdue: true, body: null }))
+
+    renderWithProviders(<DashboardPage />)
+
+    expect(await screen.findByText('Overdue')).toBeInTheDocument()
+  })
+
+  it('an administrator-only reporter contributes no body to the row', async () => {
+    stubFetch(statusWithAMessageProbe({ status: 'success', overdue: false, body: null }))
+
+    renderWithProviders(<DashboardPage />)
+
+    expect(await screen.findByText('message: success, reported 2026-10-01 04:30Z')).toBeInTheDocument()
+    expect(screen.queryByText(/NAS array/)).not.toBeInTheDocument()
   })
 })

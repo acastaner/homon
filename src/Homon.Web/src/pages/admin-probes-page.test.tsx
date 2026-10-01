@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 describe('AdminProbesPage', () => {
-  it("the kind select offers ping and http, defaults to ping, and the add form's failure threshold starts at 2", async () => {
+  it("the kind select offers ping, http and message, defaults to ping, and the add form's failure threshold starts at 2", async () => {
     stubFetch(emptyProbes)
     renderWithProviders(<AdminProbesPage />)
 
@@ -55,6 +55,7 @@ describe('AdminProbesPage', () => {
     expect(within(kindSelect).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Ping (ICMP)',
       'HTTP/HTTPS',
+      'Message (a reporter pushes to us)',
     ])
     expect(kindSelect.value).toBe('ping')
 
@@ -248,5 +249,73 @@ describe('AdminProbesPage', () => {
 
     const orderCall = calls.find((call) => call.path === '/api/v1/probes/order')
     expect(JSON.parse(String(orderCall?.init?.body))).toEqual({ probeIds: ['probe-2', 'probe-1'] })
+  })
+
+  it('a message probe chooses a reporter instead of typing a host, and posts its identifier', async () => {
+    const calls = stubFetch({
+      ...emptyProbes,
+      '/api/v1/reporters': {
+        body: [
+          {
+            id: 'reporter-1',
+            identifier: '9H4KQ2VBMTR4WXYZ',
+            name: 'clockmaster backup',
+            description: null,
+            bodyVisibility: 'administrator',
+            createdAt: '',
+            tokenId: '7Q2KX9VBMTR4',
+            keyLastUsedAt: null,
+            keyRevokedAt: null,
+            latest: null,
+            messageCount: 0,
+            isWatched: false,
+          },
+        ],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbesPage />)
+
+    await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
+
+    // While the kind is ping there is a Host textbox and no reporters request at all — the
+    // `enabled` gate in useReporters is what keeps every other case in this file fixture-free.
+    expect(screen.getByLabelText('Host')).toBeInTheDocument()
+    expect(calls.some((call) => call.path === '/api/v1/reporters')).toBe(false)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Kind' }), 'Message (a reporter pushes to us)')
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Reporter' })).toBeInTheDocument())
+    expect(screen.queryByLabelText('Host')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Name'), 'Clockmaster backup')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Reporter' }), '9H4KQ2VBMTR4WXYZ')
+    await user.click(screen.getByRole('button', { name: 'Add probe' }))
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/api/v1/probes' && call.init?.method === 'POST')).toBe(true),
+    )
+
+    const post = calls.find((call) => call.path === '/api/v1/probes' && call.init?.method === 'POST')
+    const body = JSON.parse(String(post?.init?.body))
+
+    expect(body.kind).toBe('message')
+    expect(body.host).toBe('9H4KQ2VBMTR4WXYZ')
+    expect(body.http).toBeUndefined()
+  })
+
+  it('a message probe with no reporters yet points at the reporters page instead', async () => {
+    stubFetch({ ...emptyProbes, '/api/v1/reporters': { body: [] } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbesPage />)
+
+    await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Kind' }), 'Message (a reporter pushes to us)')
+
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Add a reporter' })).toBeInTheDocument())
+    expect(screen.queryByRole('combobox', { name: 'Reporter' })).not.toBeInTheDocument()
   })
 })
