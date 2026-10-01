@@ -39,7 +39,7 @@ test('the dashboard names its sections', async ({ page }) => {
  * projects, not just at the width it happened to look right at.
  */
 test('admin row-action buttons are tappable', async ({ page }) => {
-  for (const path of ['/admin/probes', '/admin/probe-groups', '/admin/links', '/admin/pages']) {
+  for (const path of ['/admin/probes', '/admin/probe-groups', '/admin/links', '/admin/pages', '/admin/reporters', '/admin/api-keys']) {
     await page.goto(path)
     await expectTappable(page, 'button')
   }
