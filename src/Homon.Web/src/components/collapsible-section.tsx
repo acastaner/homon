@@ -1,8 +1,26 @@
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 /** `docs/design-brief.md`'s Section label rule: 12px/600/0.12em/uppercase. */
 const SECTION_LABEL = 'text-[12px] font-semibold uppercase tracking-[0.12em] text-muted'
+
+/**
+ * h-10/w-10 is the same 40px tap-target floor the heading button carries, and it applies to the
+ * DISABLED first and last buttons too: `e2e/helpers.ts`'s `expectTappable` filters on a measured
+ * width above zero, not on `disabled`, so a shrunken greyed-out button fails the gate exactly like
+ * an enabled one. An arrow, not a chevron — `ChevronDown`/`ChevronRight` already mean
+ * expanded/collapsed two elements to the left.
+ */
+const ARRANGE_BUTTON =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:border-line-strong hover:text-text disabled:pointer-events-none disabled:opacity-50'
+
+/** What arrange mode needs from the page: where this section can go, and how to get it there. */
+export interface SectionArrangeControls {
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+}
 
 /**
  * One foldable section of the dashboard, and the only disclosure pattern in this app.
@@ -20,21 +38,39 @@ const SECTION_LABEL = 'text-[12px] font-semibold uppercase tracking-[0.12em] tex
  * `aria-expanded` on the button is the whole announcement — deliberately no role="status" and no
  * aria-live anywhere in this component. role="status" in this app belongs to the session check
  * (components/require-administrator.tsx).
+ *
+ * Plan 019 added the optional `arrange` controls. They are siblings of the <h2>, never children, for
+ * the first two reasons above; and `undefined` renders NOTHING — not an empty wrapper, not a
+ * disabled pair — so on every page view that is not actively rearranging the markup is byte-for-byte
+ * what plan 018 shipped. They are typed props rather than a `headerActions?: ReactNode` slot on
+ * purpose: this component's comment claims ownership of the 40px floor, and a free-form slot would
+ * let a caller drop a 24px button in here and turn e2e/refresh.spec.ts red from another file.
  */
 export function CollapsibleSection({
   headingId,
   heading,
+  label,
   collapsed,
   onToggle,
   summary,
+  arrange,
   children,
 }: {
   headingId: string
   heading: string
+  /**
+   * The name the move buttons are addressed by, when it must not be the heading. Defaults to
+   * `heading`. Weather's heading carries the configured place — "Weather · Kitchen" — and an
+   * aria-label built from household data is a name that moves under the tests' feet and changes the
+   * moment an administrator renames the location.
+   */
+  label?: string
   collapsed: boolean
   onToggle: () => void
   /** Shown beside the heading while collapsed, for probe sections only. */
   summary?: string
+  /** Present only while the dashboard is in arrange mode. */
+  arrange?: SectionArrangeControls
   children: ReactNode
 }) {
   const panelId = `${headingId}-panel`
@@ -65,6 +101,27 @@ export function CollapsibleSection({
         {collapsed && summary !== undefined && summary !== '' ? (
           <span className="mono text-[12.5px] text-muted">{summary}</span>
         ) : null}
+        {/* The name lives in an sr-only span INSIDE each button — the icon-only pattern
+            components/theme-toggle.tsx already uses. Inside the <h2> instead, it would break
+            e2e/dashboard-groups.spec.ts's exact textContent match and every
+            getByRole('region', { name }) that reads this heading through aria-labelledby. */}
+        {arrange === undefined ? null : (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            <button type="button" onClick={arrange.onMoveUp} disabled={!arrange.canMoveUp} className={ARRANGE_BUTTON}>
+              <ArrowUp aria-hidden="true" size={16} />
+              <span className="sr-only">Move {label ?? heading} up</span>
+            </button>
+            <button
+              type="button"
+              onClick={arrange.onMoveDown}
+              disabled={!arrange.canMoveDown}
+              className={ARRANGE_BUTTON}
+            >
+              <ArrowDown aria-hidden="true" size={16} />
+              <span className="sr-only">Move {label ?? heading} down</span>
+            </button>
+          </span>
+        )}
       </div>
       {/* `hidden`, not a conditional render: aria-controls must point at an element that exists.
           This wrapper takes NO className — a Tailwind display utility (flex/grid/block) beats
