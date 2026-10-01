@@ -512,6 +512,66 @@ public class ProbeEndpointTests(ApiDatabaseFactory factory) : IClassFixture<ApiD
         Assert.Equal(HttpStatusCode.Forbidden, (await keyed.PutAsJsonAsync("/api/v1/probes/order", order)).StatusCode);
     }
 
+    [DatabaseFact]
+    public async Task A_message_probes_host_must_name_a_reporter_that_exists()
+    {
+        // Plan 021's Decision 3: a message probe's host is the identifier of the reporter it
+        // watches, so a typo here would create a probe that can only ever read Unknown.
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var refused = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = $"watcher-{Guid.NewGuid():N}",
+            host = "NOSUCHREPORTER00",
+            kind = "message",
+            pollIntervalSeconds = 900,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(problem.GetProperty("errors").TryGetProperty("host", out _));
+
+        var created = await client.PostAsJsonAsync("/api/v1/reporters", new { name = $"reporter-{Guid.NewGuid():N}" });
+        var identifier = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("reporter").GetProperty("identifier").GetString();
+
+        var accepted = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = $"watcher-{Guid.NewGuid():N}",
+            host = identifier,
+            kind = "message",
+            pollIntervalSeconds = 900,
+        });
+
+        Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+        Assert.Equal("message", (await accepted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("kind").GetString());
+    }
+
+    [DatabaseFact]
+    public async Task A_message_probe_takes_no_http_options()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var created = await client.PostAsJsonAsync("/api/v1/reporters", new { name = $"reporter-{Guid.NewGuid():N}" });
+        var identifier = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("reporter").GetProperty("identifier").GetString();
+
+        var response = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = $"watcher-{Guid.NewGuid():N}",
+            host = identifier,
+            kind = "message",
+            pollIntervalSeconds = 900,
+            http = new { method = "get", path = "/" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(problem.GetProperty("errors").TryGetProperty("http", out _));
+    }
+
     private static async Task<(HttpResponseMessage Response, JsonElement Body)> CreateAsync(
         HttpClient client, string name, int failureThreshold = 2, Guid[]? groupIds = null)
     {

@@ -267,7 +267,12 @@ internal static class ReporterEndpoints
             return TypedResults.NotFound();
         }
 
-        var take = Math.Clamp(limit ?? DefaultMessageLimit, 1, MaxMessageLimit);
+        // A nonsense limit falls back to the default rather than being clamped to one row: a
+        // report list is not a place to teach an administrator about pagination, and "?limit=0"
+        // returning a single message would look like a bug in the data.
+        var take = limit is { } requested && requested > 0
+            ? Math.Min(requested, MaxMessageLimit)
+            : DefaultMessageLimit;
 
         var messages = await database.Messages
             .AsNoTracking()
