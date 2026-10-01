@@ -837,8 +837,13 @@ throws on it.
 
 Machine-checkable. All must hold:
 
-- [ ] `./ci/run-ci.sh` prints `PASS — web api e2e`
-- [ ] `./ci/run-ci.sh api` reports **0 skipped** tests
+- [x] Each suite passes on this tree, run one at a time (exit code checked, not just the
+      banner): `web` → 23 files / 150 tests; `api` → 346 tests, **0 skipped**; `e2e` → 107
+      tests at Pixel 7 and 1440×900. **Corrected during execution**: the combined
+      `./ci/run-ci.sh` aborts on this machine with `Internal CLR error. (0x80131506)`
+      (exit 134) partway through `dotnet test`, which is the environmental abort already
+      recorded for this checkout; suite-by-suite is the reliable form here. Note also that
+      piping the gate into `tail` reports *tail's* exit code — check the gate's own.
 - [ ] `grep -rn "api.open-meteo.com" src/Homon.Web/src` returns no matches
 - [ ] `git diff --stat 9957b7b..HEAD -- src/Homon.Infrastructure/Weather/WeatherCache.cs tests/Homon.Api.Tests/WeatherCacheTests.cs src/Homon.Domain/Weather/WeatherSettings.cs src/Homon.Web/src/pages/admin-weather-page.tsx` is **empty**
 - [ ] `git status --porcelain src/Homon.Infrastructure/Persistence/Migrations` is **empty** — no migration
@@ -862,6 +867,26 @@ Machine-checkable. All must hold:
 - [ ] `plans/020-weather-page-and-day-extremes.md` exists, carries what step 0 observed, and
       `plans/README.md` has its row
 - [ ] branch `plan/020-weather-page` is checked out, nothing merged, nothing pushed
+
+## What the rendered page caught that the tests did not
+
+Worth recording, because it is the argument for CLAUDE.md's "run it and click it":
+
+The first full render showed a tinted hour reading **`12 km/h` in red** while the banner above
+it said gusts to 94. Every suite was green — the row tint was correct, the banner was correct,
+and the cell's colour came from the row's severity, which is exactly what the plan asked for.
+The bug was that the *mean wind* was the one number in that row which could not justify the
+colour, so the table appeared to contradict the banner.
+
+Fixed by giving each cell its own severity: the wind cell takes colour only from a wind
+advisory and shows the gust that caused it (`12 km/h · gusts 94`), and the daily rain cell only
+from a rain or snow advisory, so a heat advisory no longer reddens a precipitation figure. The
+column was widened and set `whitespace-nowrap` because the longer string wrapped and made
+tinted rows taller than their neighbours.
+
+Two tests now pin it, and both fail against the previous code. The general lesson for this
+module: **a test that asserts a tint is present does not ask whether the tint points at the
+right number.**
 
 ## STOP conditions
 
