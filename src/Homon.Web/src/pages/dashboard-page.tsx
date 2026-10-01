@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router'
 
 import { CollapsibleSection } from '@/components/collapsible-section'
@@ -9,12 +9,21 @@ import { useCollapsedSections } from '@/lib/collapsed-sections'
 import { formatUptime } from '@/lib/format-uptime'
 import { useLinks } from '@/lib/links'
 import { usePublishedPages } from '@/lib/pages'
-import { dashboardSections, formatCheckedAt, summariseProbeStates, useStatus, type ProbeState } from '@/lib/status'
+import { orderSections, useSectionOrder } from '@/lib/section-order'
+import {
+  dashboardSections,
+  formatCheckedAt,
+  summariseProbeStates,
+  useStatus,
+  type DashboardSection,
+  type ProbeState,
+} from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 import {
   useWeather,
   weatherConditionIcon,
   WEATHER_CONDITION_LABEL,
+  type Weather,
   type WeatherUnitsValue,
 } from '@/lib/weather'
 
@@ -96,12 +105,198 @@ function formatForecastDay(date: string): string {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' })
 }
 
+
 const PANEL = 'rounded-md border border-line bg-surface'
 
 /**
- * The family's page: a stat strip, then one section per non-empty probe group followed by the
- * ungrouped rest — `dashboardSections` decides the split and the labels — then Links, a
- * conditional Pages section, and Weather.
+ * The page-level controls beside the <h1>. `h-10` is the 40px tap-target floor `e2e/helpers.ts`'s
+ * `expectTappable` enforces over every <button> on `/` — `e2e/refresh.spec.ts` runs it on this very
+ * page. Not cosmetic; do not shrink it. The `text-muted` / `border-line` pair is the one the stat
+ * strip beside it already uses, which is what keeps `e2e/contrast.spec.ts` (axe's `color-contrast`
+ * over this page, both schemes) green without a new token.
+ */
+const HEADER_BUTTON =
+  'inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-muted hover:border-line-strong hover:text-text disabled:pointer-events-none disabled:opacity-50'
+
+/**
+ * One dashboard section, whatever it holds — a probe group, the ungrouped rest, Links, Pages,
+ * Weather. Everything the page renders goes through this list so that ordering
+ * (`lib/section-order.ts`) has one flat thing to permute, rather than four hard-coded JSX blocks in
+ * a fixed sequence.
+ *
+ * An array, not a map keyed by id: the ordering algebra consumes a list, nothing here ever wants one
+ * section by id (the only lookups are "what is above me" and "what is below me", which are
+ * `ordered[index - 1]` and `ordered[index + 1]`), and the conditional Pages section is an array
+ * spread rather than a `present` flag every consumer would have to remember to honour.
+ *
+ * Declared here and not in `lib/status.ts` because it holds a `ReactNode`, and that module is
+ * React-free.
+ */
+interface SectionSlot {
+  id: string
+  headingId: string
+  /** What the <h2> says. May carry a suffix — see `label`. */
+  heading: string
+  /** The stable name the move buttons are addressed by. Differs from `heading` for Weather only. */
+  label: string
+  /** Shown beside the heading while collapsed. Probe sections only. */
+  summary?: string
+  body: ReactNode
+}
+
+/**
+ * The probe table, or the "No probes yet" onboarding panel — unchanged from plan 002, lifted into a
+ * function so the slot list below stays readable. A plain function and not a component: there is no
+ * new component identity for React to reconcile across a reorder.
+ */
+function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
+  if (section.probes.length === 0) {
+    return (
+      <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
+        <p className="text-[13.5px] text-muted">
+          No probes yet. An administrator adds them under{' '}
+          <RouterLink to="/admin/probes" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
+            Admin → Probes
+          </RouterLink>
+          .
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${PANEL} overflow-x-auto`}>
+      <table className="w-full min-w-[640px] border-collapse text-left sm:min-w-0">
+        <thead>
+          <tr className="text-[11.5px] font-semibold tracking-[0.08em] text-muted uppercase">
+            <th scope="col" className="w-[132px] px-4 py-2 font-semibold">
+              Status
+            </th>
+            <th scope="col" className="px-4 py-2 font-semibold">
+              Service
+            </th>
+            <th scope="col" className="px-4 py-2 font-semibold">
+              Detail
+            </th>
+            <th scope="col" className="w-24 px-4 py-2 text-right font-semibold">
+              Uptime
+            </th>
+            <th scope="col" className="w-[92px] px-4 py-2 font-semibold">
+              30 days
+            </th>
+            <th scope="col" className="w-[120px] px-4 py-2 font-semibold">
+              Checked
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {section.probes.map((probe) => (
+            <tr key={probe.id} className={`min-h-12 border-t border-line ${rowStateClassName(probe.state)}`}>
+              <td className="px-4 py-3">
+                <StatusChip state={probe.state} />
+              </td>
+              <td className="px-4 py-3 text-[15px] font-semibold">{probe.name}</td>
+              <td className={`px-4 py-3 text-[14px] ${detailClassName(probe.state)}`}>{probe.detail ?? ''}</td>
+              <td className="mono px-4 py-3 text-right text-[14px]">{formatUptime(probe.uptimePercent)}</td>
+              <td className="px-4 py-3">
+                {probe.kind === 'ping' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
+              </td>
+              <td className="px-4 py-3 text-[13px] text-muted">{formatCheckedAt(probe.lastCheckedAt, now)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** The weather panel and its four states: not configured, temporarily unavailable, loaded, loading. */
+function weatherSectionBody(
+  weather: Weather | null | undefined,
+  isWeatherError: boolean,
+  weatherError: unknown,
+): ReactNode {
+  if (weather === null) {
+    return (
+      <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
+        <p className="text-[13.5px] text-muted">
+          No weather location yet — an administrator sets it under Admin →{' '}
+          <RouterLink to="/admin/weather" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
+            Weather
+          </RouterLink>
+        </p>
+      </div>
+    )
+  }
+
+  if (isWeatherError && weatherError instanceof ApiError && weatherError.status === 503) {
+    return (
+      <div className={`${PANEL} px-4 py-3.5`}>
+        <p className="text-[13.5px] text-muted">Weather is temporarily unavailable.</p>
+      </div>
+    )
+  }
+
+  if (!weather) {
+    return null
+  }
+
+  const CurrentIcon = weatherConditionIcon(weather.current.condition)
+
+  return (
+    <div className={`${PANEL} p-4`}>
+      <div className="flex items-center gap-3.5 pb-3">
+        <CurrentIcon aria-hidden="true" strokeWidth={1.5} className="size-10 shrink-0 text-muted" />
+        <div className="flex flex-col gap-0.5">
+          <p className="mono text-[28px] leading-none font-medium sm:text-[30px]">
+            {Math.round(weather.current.temperature)}
+            {unitSymbol(weather.units)}
+          </p>
+          <p className="text-[14px] text-muted">
+            {WEATHER_CONDITION_LABEL[weather.current.condition]} · Wind{' '}
+            {Math.round(weather.current.windSpeed)} {windUnit(weather.units)} · Feels like{' '}
+            {Math.round(weather.current.apparentTemperature)}
+            {unitSymbol(weather.units)}
+          </p>
+        </div>
+      </div>
+      <ul className="divide-y divide-line">
+        {weather.forecast.map((day) => {
+          const DayIcon = weatherConditionIcon(day.condition)
+          return (
+            <li key={day.date} className="flex items-center gap-2.5 py-2 text-[14px]">
+              <span className="w-10 text-muted">{formatForecastDay(day.date)}</span>
+              <DayIcon aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0 text-muted" />
+              <span>{WEATHER_CONDITION_LABEL[day.condition]}</span>
+              <span className="mono ml-auto font-medium">
+                {Math.round(day.high)}
+                {unitSymbol(weather.units)}/{Math.round(day.low)}
+                {unitSymbol(weather.units)}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="pt-3 text-[12.5px] text-muted">
+        Weather data by{' '}
+        <a
+          href="https://open-meteo.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+        >
+          Open-Meteo.com
+        </a>
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The family's page: a stat strip, then every section in the order this browser's reader put them
+ * in — one per probe group, the ungrouped rest when there is one, Links, Pages when anything is
+ * published, and Weather. `dashboardSections` decides the probe split and the labels;
+ * `lib/section-order.ts` decides the sequence and remembers it.
  */
 export function DashboardPage() {
   useDocumentTitle(pageTitle('Dashboard'))
@@ -118,103 +313,44 @@ export function DashboardPage() {
   const { data: weather, isError: isWeatherError, error: weatherError } = useWeather()
 
   const { collapsed, toggle } = useCollapsedSections()
+  const { order, swap, reset } = useSectionOrder()
 
-  // Everything that can be a section, not only what is on screen right now: `pages` disappears
-  // entirely when no page is published, and pruning (lib/collapsed-sections.ts) must not forget
-  // a reader's choice just because the Pages section is temporarily absent. `null` until the
-  // status query has answered — see that module's comment for why pruning early is destructive.
-  const knownSectionIds = status.data === undefined ? null : [...sections.map((section) => section.id), 'links', 'pages', 'weather']
+  // Arrange mode is deliberately NOT persisted: it is a mode you are in, not a preference you hold.
+  // A browser that reopened the dashboard mid-arrangement would greet a reader who only wanted to
+  // know whether the NAS is up with two extra controls on every section.
+  const [isArranging, setIsArranging] = useState(false)
 
-  return (
-    <>
-      <div className="flex flex-col gap-3 border-b border-line-strong pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
-        <h1 className="text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">Dashboard</h1>
-        {totals ? (
-          // Deliberately flat text, no per-value <span> — dashboard-page.test.tsx's
-          // `getByText(/1 up · 0 unstable · …/)` matches only a node's DIRECT text-node
-          // children (testing-library's getNodeText), not text nested inside child
-          // elements, so wrapping the numbers to colour them individually would make no
-          // element's own text ever equal the full string again. Decision 7 (the test
-          // suite is the contract) wins over the brief's "unstable and down in their
-          // status colours" here; the mono treatment applies to the line as a whole.
-          <p className="mono text-[13px] text-muted sm:text-sm">
-            {totals.up} up · {totals.unstable} unstable · {totals.down} down · {totals.paused} paused ·{' '}
-            {formatUptime(totals.uptimePercent)} uptime, 30 days
-          </p>
-        ) : null}
-      </div>
-      {sections.map((section) => (
-        <CollapsibleSection
-          key={section.id}
-          headingId={section.headingId}
-          heading={section.heading}
-          collapsed={collapsed.has(section.id)}
-          onToggle={() => toggle(section.id, knownSectionIds)}
-          summary={summariseProbeStates(section.probes)}
-        >
-          {section.probes.length === 0 ? (
-            <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
-              <p className="text-[13.5px] text-muted">
-                No probes yet. An administrator adds them under{' '}
-                <RouterLink to="/admin/probes" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
-                  Admin → Probes
-                </RouterLink>
-                .
-              </p>
-            </div>
-          ) : (
-            <div className={`${PANEL} overflow-x-auto`}>
-              <table className="w-full min-w-[640px] border-collapse text-left sm:min-w-0">
-                <thead>
-                  <tr className="text-[11.5px] font-semibold tracking-[0.08em] text-muted uppercase">
-                    <th scope="col" className="w-[132px] px-4 py-2 font-semibold">
-                      Status
-                    </th>
-                    <th scope="col" className="px-4 py-2 font-semibold">
-                      Service
-                    </th>
-                    <th scope="col" className="px-4 py-2 font-semibold">
-                      Detail
-                    </th>
-                    <th scope="col" className="w-24 px-4 py-2 text-right font-semibold">
-                      Uptime
-                    </th>
-                    <th scope="col" className="w-[92px] px-4 py-2 font-semibold">
-                      30 days
-                    </th>
-                    <th scope="col" className="w-[120px] px-4 py-2 font-semibold">
-                      Checked
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {section.probes.map((probe) => (
-                    <tr key={probe.id} className={`min-h-12 border-t border-line ${rowStateClassName(probe.state)}`}>
-                      <td className="px-4 py-3">
-                        <StatusChip state={probe.state} />
-                      </td>
-                      <td className="px-4 py-3 text-[15px] font-semibold">{probe.name}</td>
-                      <td className={`px-4 py-3 text-[14px] ${detailClassName(probe.state)}`}>{probe.detail ?? ''}</td>
-                      <td className="mono px-4 py-3 text-right text-[14px]">{formatUptime(probe.uptimePercent)}</td>
-                      <td className="px-4 py-3">
-                        {probe.kind === 'ping' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
-                      </td>
-                      <td className="px-4 py-3 text-[13px] text-muted">{formatCheckedAt(probe.lastCheckedAt, now)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CollapsibleSection>
-      ))}
-      <CollapsibleSection
-        headingId="links-heading"
-        heading="Links"
-        collapsed={collapsed.has('links')}
-        onToggle={() => toggle('links', knownSectionIds)}
-      >
-        {links.length === 0 ? (
+  // Every id that CAN be a section, in natural order — not only what is on screen right now.
+  // `pages` vanishes when nothing is published and `ungrouped` vanishes when every probe is grouped
+  // (plan 019), and neither pruning (lib/collapsed-sections.ts) nor ordering (lib/section-order.ts)
+  // may forget a reader's choice because a section is temporarily absent.
+  //
+  // Built from `status.data.groups` with 'ungrouped' as a LITERAL, deliberately not from `sections`:
+  // `sections` no longer contains the ungrouped section when it is empty, so deriving this from it
+  // would drop 'ungrouped' from the prune list and wipe that section's remembered collapse and
+  // order slot on the very next press of any other section's control. `null` until /status has
+  // answered — see lib/collapsed-sections.ts for why pruning early is destructive.
+  const knownSectionIds =
+    status.data === undefined
+      ? null
+      : [...status.data.groups.map((group) => group.id), 'ungrouped', 'links', 'pages', 'weather']
+
+  const slots: SectionSlot[] = [
+    ...sections.map((section) => ({
+      id: section.id,
+      headingId: section.headingId,
+      heading: section.heading,
+      label: section.heading,
+      summary: summariseProbeStates(section.probes),
+      body: probeSectionBody(section, now),
+    })),
+    {
+      id: 'links',
+      headingId: 'links-heading',
+      heading: 'Links',
+      label: 'Links',
+      body:
+        links.length === 0 ? (
           <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
             <p className="text-[13.5px] text-muted">
               No links yet. An administrator adds them under Admin →{' '}
@@ -240,101 +376,126 @@ export function DashboardPage() {
               </li>
             ))}
           </ul>
-        )}
-      </CollapsibleSection>
-      {pages.length > 0 ? (
-        <CollapsibleSection
-          headingId="pages-heading"
-          heading="Pages"
-          collapsed={collapsed.has('pages')}
-          onToggle={() => toggle('pages', knownSectionIds)}
-        >
-          <ul className={`${PANEL} divide-y divide-line px-4`}>
-            {pages.map((page) => (
-              <li key={page.slug} className="py-2.5">
-                <RouterLink
-                  to={`/pages/${page.slug}`}
-                  className="text-[15px] font-semibold text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
-                >
-                  {page.title}
-                </RouterLink>
-              </li>
-            ))}
-          </ul>
-        </CollapsibleSection>
-      ) : null}
-      <CollapsibleSection
-        headingId="weather-heading"
-        heading={`Weather${weather?.place ? ` · ${weather.place}` : ''}`}
-        collapsed={collapsed.has('weather')}
-        onToggle={() => toggle('weather', knownSectionIds)}
-      >
-        {weather === null ? (
-          <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
-            <p className="text-[13.5px] text-muted">
-              No weather location yet — an administrator sets it under Admin →{' '}
-              <RouterLink to="/admin/weather" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
-                Weather
-              </RouterLink>
-            </p>
-          </div>
-        ) : isWeatherError && weatherError instanceof ApiError && weatherError.status === 503 ? (
-          <div className={`${PANEL} px-4 py-3.5`}>
-            <p className="text-[13.5px] text-muted">Weather is temporarily unavailable.</p>
-          </div>
-        ) : weather ? (
-          <div className={`${PANEL} p-4`}>
-            {(() => {
-              const CurrentIcon = weatherConditionIcon(weather.current.condition)
-              return (
-                <div className="flex items-center gap-3.5 pb-3">
-                  <CurrentIcon aria-hidden="true" strokeWidth={1.5} className="size-10 shrink-0 text-muted" />
-                  <div className="flex flex-col gap-0.5">
-                    <p className="mono text-[28px] leading-none font-medium sm:text-[30px]">
-                      {Math.round(weather.current.temperature)}
-                      {unitSymbol(weather.units)}
-                    </p>
-                    <p className="text-[14px] text-muted">
-                      {WEATHER_CONDITION_LABEL[weather.current.condition]} · Wind{' '}
-                      {Math.round(weather.current.windSpeed)} {windUnit(weather.units)} · Feels like{' '}
-                      {Math.round(weather.current.apparentTemperature)}
-                      {unitSymbol(weather.units)}
-                    </p>
-                  </div>
-                </div>
-              )
-            })()}
-            <ul className="divide-y divide-line">
-              {weather.forecast.map((day) => {
-                const DayIcon = weatherConditionIcon(day.condition)
-                return (
-                  <li key={day.date} className="flex items-center gap-2.5 py-2 text-[14px]">
-                    <span className="w-10 text-muted">{formatForecastDay(day.date)}</span>
-                    <DayIcon aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0 text-muted" />
-                    <span>{WEATHER_CONDITION_LABEL[day.condition]}</span>
-                    <span className="mono ml-auto font-medium">
-                      {Math.round(day.high)}
-                      {unitSymbol(weather.units)}/{Math.round(day.low)}
-                      {unitSymbol(weather.units)}
-                    </span>
+        ),
+    },
+    // Absent entirely when nothing is published, exactly as before — which is why 'pages' stays in
+    // `knownSectionIds` above, so its slot in the stored order survives the absence.
+    ...(pages.length > 0
+      ? [
+          {
+            id: 'pages',
+            headingId: 'pages-heading',
+            heading: 'Pages',
+            label: 'Pages',
+            body: (
+              <ul className={`${PANEL} divide-y divide-line px-4`}>
+                {pages.map((page) => (
+                  <li key={page.slug} className="py-2.5">
+                    <RouterLink
+                      to={`/pages/${page.slug}`}
+                      className="text-[15px] font-semibold text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+                    >
+                      {page.title}
+                    </RouterLink>
                   </li>
-                )
-              })}
-            </ul>
-            <p className="pt-3 text-[12.5px] text-muted">
-              Weather data by{' '}
-              <a
-                href="https://open-meteo.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
-              >
-                Open-Meteo.com
-              </a>
-            </p>
-          </div>
+                ))}
+              </ul>
+            ),
+          },
+        ]
+      : []),
+    {
+      id: 'weather',
+      headingId: 'weather-heading',
+      heading: `Weather${weather?.place ? ` · ${weather.place}` : ''}`,
+      // NOT the heading: that carries the configured place, which is household data.
+      label: 'Weather',
+      body: weatherSectionBody(weather, isWeatherError, weatherError),
+    },
+  ]
+
+  const ordered = orderSections(slots, order)
+
+  return (
+    <>
+      <div className="flex flex-col gap-3 border-b border-line-strong pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
+        {/* The <h1> keeps its own text and nothing else — e2e/layout.spec.ts and e2e/admin.spec.ts
+            both match `heading, level: 1, name: 'Dashboard'` exactly, so these buttons are its
+            siblings, never its children. flex-wrap because "Dashboard" plus two 40px controls is
+            close to a Pixel 7's width, and e2e/layout.spec.ts measures the document. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">Dashboard</h1>
+          {/* The accessible name states the ACTION, not the state — the reasoning written down in
+              components/theme-toggle.tsx. Swapping the text to "Done" is the whole announcement, so
+              no aria-pressed: a stable name plus aria-pressed would make every locator in the unit
+              and Playwright suites depend on knowing which mode the page happens to be in. */}
+          <button type="button" onClick={() => setIsArranging(!isArranging)} className={HEADER_BUTTON}>
+            {isArranging ? 'Done' : 'Arrange'}
+          </button>
+          {/* One page-level Reset, not one per section: the action clears a single key, and N
+              buttons sharing the accessible name "Reset order" is an instant strict-mode
+              ambiguity in Playwright. */}
+          {isArranging ? (
+            <button type="button" onClick={reset} disabled={order.length === 0} className={HEADER_BUTTON}>
+              Reset order
+            </button>
+          ) : null}
+        </div>
+        {totals ? (
+          // Deliberately flat text, no per-value <span> — dashboard-page.test.tsx's
+          // `getByText(/1 up · 0 unstable · …/)` matches only a node's DIRECT text-node
+          // children (testing-library's getNodeText), not text nested inside child
+          // elements, so wrapping the numbers to colour them individually would make no
+          // element's own text ever equal the full string again. Decision 7 (the test
+          // suite is the contract) wins over the brief's "unstable and down in their
+          // status colours" here; the mono treatment applies to the line as a whole.
+          <p className="mono text-[13px] text-muted sm:text-sm">
+            {totals.up} up · {totals.unstable} unstable · {totals.down} down · {totals.paused} paused ·{' '}
+            {formatUptime(totals.uptimePercent)} uptime, 30 days
+          </p>
         ) : null}
-      </CollapsibleSection>
+      </div>
+      {/* A direct child of the fragment, NOT wrapped in a <div>: app-shell.tsx makes <main> a
+          `flex flex-col gap-8` and these sections are its own flex children, so a wrapper would
+          collapse every gap between sections into one. */}
+      {ordered.map((slot, index) => {
+        // The neighbours are the sections VISIBLE above and below, never the neighbouring stored
+        // ids — a reader pressing "up" means "above what I can see".
+        const above = ordered[index - 1]
+        const below = ordered[index + 1]
+
+        return (
+          <CollapsibleSection
+            key={slot.id}
+            headingId={slot.headingId}
+            heading={slot.heading}
+            label={slot.label}
+            collapsed={collapsed.has(slot.id)}
+            onToggle={() => toggle(slot.id, knownSectionIds)}
+            summary={slot.summary}
+            arrange={
+              isArranging
+                ? {
+                    canMoveUp: above !== undefined,
+                    canMoveDown: below !== undefined,
+                    onMoveUp: () => {
+                      if (above !== undefined) {
+                        swap(slot.id, above.id, knownSectionIds)
+                      }
+                    },
+                    onMoveDown: () => {
+                      if (below !== undefined) {
+                        swap(slot.id, below.id, knownSectionIds)
+                      }
+                    },
+                  }
+                : undefined
+            }
+          >
+            {slot.body}
+          </CollapsibleSection>
+        )
+      })}
     </>
   )
 }

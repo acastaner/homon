@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { COLLAPSED_SECTIONS_STORAGE_KEY, writeCollapsedSections } from '@/lib/collapsed-sections'
+import { SECTION_ORDER_STORAGE_KEY, writeSectionOrder } from '@/lib/section-order'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { renderWithProviders } from '@/test/render'
 import { stubFetch } from '@/test/fetch'
@@ -232,5 +233,177 @@ describe('DashboardPage', () => {
     const hosts = screen.getByRole('region', { name: 'Hosts' })
     expect(screen.getByRole('button', { name: 'Hosts' })).toHaveAttribute('aria-expanded', 'false')
     expect(within(hosts).getByText('1 up')).toBeVisible()
+  })
+
+  /** The level-2 headings in document order — the same shape the e2e suite's `toHaveText` uses. */
+  function headingOrder(): (string | null)[] {
+    return screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
+  }
+
+  it('shows no ungrouped section when every probe belongs to a group', async () => {
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(screen.queryByRole('region', { name: 'Other' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Storage' })).toBeInTheDocument()
+  })
+
+  it('a bare install still shows Services and where an administrator fixes it', async () => {
+    stubFetch({
+      '/api/v1/status': { body: { totals: null, probes: [], groups: [], ungroupedProbeIds: [], generatedAt: '2026-01-01T00:00:00Z' } },
+      '/api/v1/links': { body: [] },
+      '/api/v1/pages': { body: [] },
+      '/api/v1/weather': { status: 204 },
+    })
+    renderWithProviders(<DashboardPage />)
+
+    const services = await screen.findByRole('region', { name: 'Services' })
+
+    expect(within(services).getByText(/No probes yet/)).toBeVisible()
+    expect(within(services).getByRole('link', { name: 'Admin → Probes' })).toHaveAttribute('href', '/admin/probes')
+  })
+
+  it('the move controls appear only in arrange mode', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(screen.queryByRole('button', { name: 'Move Hosts up' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+    expect(screen.getByRole('button', { name: 'Move Hosts up' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('button', { name: 'Move Hosts up' })).not.toBeInTheDocument()
+  })
+
+  it('moving Weather up reorders the sections and writes the whole known order', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(headingOrder()).toEqual(['Hosts', 'Storage', 'Links', 'Weather'])
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+    await user.click(screen.getByRole('button', { name: 'Move Weather up' }))
+
+    expect(headingOrder()).toEqual(['Hosts', 'Storage', 'Weather', 'Links'])
+    // 'ungrouped' and 'pages' render nothing here, and they keep their own indices in storage —
+    // a swap exchanges two ids and touches no others (lib/section-order.ts).
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).toBe(
+      '["group-hosts","group-storage","ungrouped","weather","pages","links"]',
+    )
+  })
+
+  it('a stored order arranges the sections on first paint', async () => {
+    writeSectionOrder(['weather', 'links', 'group-storage', 'group-hosts'])
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    expect(headingOrder()).toEqual(['Weather', 'Links', 'Storage', 'Hosts'])
+  })
+
+  it('Reset order restores the natural order and removes the key', async () => {
+    const user = userEvent.setup()
+    writeSectionOrder(['weather', 'links', 'group-storage', 'group-hosts'])
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+    await user.click(screen.getByRole('button', { name: 'Reset order' }))
+
+    expect(headingOrder()).toEqual(['Hosts', 'Storage', 'Links', 'Weather'])
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).toBeNull()
+  })
+
+  it('moving a section back where it came from removes the key rather than storing the natural order', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+    await user.click(screen.getByRole('button', { name: 'Move Weather up' }))
+    await user.click(screen.getByRole('button', { name: 'Move Weather down' }))
+
+    expect(headingOrder()).toEqual(['Hosts', 'Storage', 'Links', 'Weather'])
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).toBeNull()
+  })
+
+  it('the first section cannot move up and the last cannot move down', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+
+    expect(screen.getByRole('button', { name: 'Move Hosts up' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move Hosts down' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Move Weather down' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move Weather up' })).toBeEnabled()
+  })
+
+  it('entering arrange mode on its own writes nothing', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).toBeNull()
+    // Nothing to reset yet, so the control says so rather than pretending.
+    expect(screen.getByRole('button', { name: 'Reset order' })).toBeDisabled()
+  })
+
+  it("the Weather move button is named for the section, not for the configured place", async () => {
+    const user = userEvent.setup()
+    stubFetch({
+      ...statusWithASharedProbe,
+      '/api/v1/weather': {
+        body: {
+          place: 'Test location',
+          units: 'metric',
+          current: { temperature: 18.4, apparentTemperature: 17.2, windSpeed: 12.1, condition: 'clear', isDay: true },
+          forecast: [{ date: '2026-01-02', condition: 'clear', high: 19, low: 11 }],
+          fetchedAt: '2026-01-01T00:00:00Z',
+          stale: false,
+        },
+      },
+    })
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Weather · Test location' })
+
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+
+    expect(screen.getByRole('button', { name: 'Move Weather up' })).toBeInTheDocument()
+  })
+
+  it('collapse and order are remembered independently', async () => {
+    const user = userEvent.setup()
+    stubFetch(statusWithASharedProbe)
+    renderWithProviders(<DashboardPage />)
+    await screen.findByRole('region', { name: 'Hosts' })
+
+    await user.click(screen.getByRole('button', { name: 'Hosts' }))
+    await user.click(screen.getByRole('button', { name: 'Arrange' }))
+    await user.click(screen.getByRole('button', { name: 'Move Weather up' }))
+
+    // Two keys, two lifetimes: the whole reason plan 019 did not widen plan 018's value.
+    expect(window.localStorage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY)).toBe('["group-hosts"]')
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Hosts' }))
+
+    expect(window.localStorage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(SECTION_ORDER_STORAGE_KEY)).not.toBeNull()
   })
 })
