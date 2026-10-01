@@ -355,6 +355,11 @@ builder.Services
 // ---- Authorisation ---------------------------------------------------------------------
 
 builder.Services.AddSingleton<IAuthorizationHandler, ReaderHandler>();
+
+// Minting is now reachable from two endpoints as well as the create-api-key verb (plan 021), so
+// the issuer is registered rather than constructed per call site. Scoped, because it writes
+// through the scoped DbContext.
+builder.Services.AddScoped<ApiKeyIssuer>();
 builder.Services.AddAuthorizationBuilder()
     .AddHomonPolicies();
 
@@ -403,6 +408,20 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             });
     });
+
+    // The message gateway's ingestion endpoint. Partitioned on the caller's key id and not on its
+    // IP: a script's address is its server's, shared with everything else on that host, so an IP
+    // partition would let one chatty reporter throttle every other reporter on the same machine.
+    // The figures are constants rather than configuration — see MessageEndpoints.
+    options.AddPolicy(MessageEndpoints.ReportThrottlePolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"message-report:{httpContext.User.FindFirst(HomonClaimTypes.ApiKeyId)?.Value ?? "unknown"}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = MessageEndpoints.ReportPermitLimit,
+                Window = MessageEndpoints.ReportWindow,
+                QueueLimit = 0,
+            }));
 });
 
 // ---- Web API ---------------------------------------------------------------------------
@@ -520,7 +539,9 @@ v1.MapLinkEndpoints();
 
 // Module endpoints register here as each module lands — see docs/MODULES.md:
 v1.MapPageEndpoints();
-//   v1.MapBackupEndpoints();   v1.MapApiKeyEndpoints();
+v1.MapReporterEndpoints();
+v1.MapMessageEndpoints();
+v1.MapApiKeyEndpoints();
 v1.MapWeatherEndpoints();
 //   v1.MapCalendarEndpoints();
 

@@ -49,4 +49,11 @@ public static class MessageBody
 
         return string.Concat(TruncationMarker, Encoding.UTF8.GetString(bytes, start, bytes.Length - start));
     }
+
+    /// <summary>
+    /// Whether a stored body is a truncated one, read from the marker rather than from a column of
+    /// its own — the marker is already part of the text and cannot disagree with it.
+    /// </summary>
+    public static bool WasTruncated(string? storedBody) =>
+        storedBody?.StartsWith(TruncationMarker, StringComparison.Ordinal) is true;
 }

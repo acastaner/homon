@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Homon.Api.Authentication;
 
-/// <summary>The four authorisation policies, and what each admits.</summary>
+/// <summary>The five authorisation policies, and what each admits.</summary>
 public static class HomonPolicies
 {
     /// <summary>
@@ -29,11 +29,24 @@ public static class HomonPolicies
     /// A session in the Administrator role, or any authenticated API key of either scope. The
     /// shape plan 002's probe-list read (<c>GET /probes</c>) needs. Scope is not discriminated
     /// here — narrowing to ReadWrite only is a write concern and no write uses this policy
-    /// (writes stay <see cref="Administrator"/>, session only, per docs/ARCHITECTURE.md §3.3);
-    /// a ReadWrite-only variant is deferred to the Backups module (plan 008), the first thing
-    /// that needs one.
+    /// (writes stay <see cref="Administrator"/>, session only, per docs/ARCHITECTURE.md §3.3).
+    /// The ReadWrite-only variant §3.13 and plan 013 both deferred is
+    /// <see cref="ApiKeyWrite"/>, added by plan 021.
     /// </summary>
     public const string AdministratorOrApiKey = "AdministratorOrApiKey";
+
+    /// <summary>
+    /// An API key whose scope is <see cref="ApiKeyScope.ReadWrite"/>, and only that: the message
+    /// gateway's ingestion endpoint. A <see cref="ApiKeyScope.Read"/> key is refused with 403
+    /// rather than 401 — it authenticated perfectly well, it simply may not report — and a
+    /// session is refused for the same reason <see cref="ApiKey"/> refuses one.
+    /// </summary>
+    /// <remarks>
+    /// This is the first consumer of the distinction plan 013 introduced and §3.13 recorded as
+    /// existing "for the Backups module (008), whose report endpoint is the first thing that
+    /// should refuse a Read key". Plan 021 supersedes 008 and inherited that sentence.
+    /// </remarks>
+    public const string ApiKeyWrite = "ApiKeyWrite";
 
     public static AuthorizationBuilder AddHomonPolicies(this AuthorizationBuilder builder)
     {
@@ -45,6 +58,12 @@ public static class HomonPolicies
             .AddPolicy(ApiKey, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication))
+            .AddPolicy(ApiKeyWrite, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim(HomonClaimTypes.AuthenticationKind, HomonClaimTypes.ApiKeyAuthentication)
+                // The claim carries the scope's name, not its number — ApiKeyAuthenticationHandler
+                // writes key.Scope.ToString(), and ApiKeyConfiguration persists the same text.
+                .RequireClaim(HomonClaimTypes.ApiKeyScope, nameof(ApiKeyScope.ReadWrite)))
             .AddPolicy(AdministratorOrApiKey, policy => policy.RequireAssertion(context =>
                 context.User.IsInRole(HomonRoles.Administrator)
                 || (context.User.Identity?.IsAuthenticated is true

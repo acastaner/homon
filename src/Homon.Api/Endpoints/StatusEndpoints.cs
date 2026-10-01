@@ -1,4 +1,5 @@
 using Homon.Api.Authentication;
+using Homon.Domain.Messaging;
 using Homon.Domain.Monitoring;
 using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Persistence;
@@ -57,6 +58,8 @@ internal static class StatusEndpoints
                 ? ProbeUptimeCalculator.Calculate(counts.Success, counts.Total)
                 : null);
 
+        var messagesByProbe = await BuildMessageSummariesAsync(database, probes, now, cancellationToken);
+
         var sparklinesByProbe = await BuildSparklinesAsync(
             database, probes, windowStart, now - windowStart, monitoring.SparklineBucketCount, cancellationToken);
 
@@ -77,7 +80,8 @@ internal static class StatusEndpoints
                 p.LastDetail,
                 p.LastObservedAt,
                 perProbeUptime.GetValueOrDefault(p.Id),
-                sparklinesByProbe.GetValueOrDefault(p.Id, [])))
+                sparklinesByProbe.GetValueOrDefault(p.Id, []),
+                messagesByProbe.GetValueOrDefault(p.Id)))
             .ToArray();
 
         var groups = await database.ProbeGroups
@@ -102,6 +106,88 @@ internal static class StatusEndpoints
 
         return TypedResults.Ok(new StatusResponse(totals, probeResponses, groupSummaries, ungroupedProbeIds, now));
     }
+
+    /// <summary>
+    /// The newest message behind every <see cref="ProbeKind.Message"/> probe, as much of it as a
+    /// reader may see. Three queries at most and none of them per probe; nothing at all when the
+    /// household has no message probes.
+    /// </summary>
+    /// <remarks>
+    /// The body is here only when its reporter's <see cref="MessageBodyVisibility"/> says so, and
+    /// then capped at <see cref="ReaderBodyMaxLength"/> characters: this payload is polled every
+    /// 30 seconds, and a 64 KiB command output on that interval is not a thing to put on a
+    /// kitchen-counter dashboard. The full body has exactly one route, and it is
+    /// administrator-only (plan 021, Decision 11).
+    /// </remarks>
+    private static async Task<Dictionary<Guid, ProbeMessageResponse>> BuildMessageSummariesAsync(
+        HomonDbContext database,
+        List<Probe> probes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var identifiers = probes
+            .Where(p => p.Kind == ProbeKind.Message)
+            .Select(p => p.Host)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (identifiers.Count == 0)
+        {
+            return [];
+        }
+
+        var reporters = await database.Reporters
+            .Where(r => identifiers.Contains(r.Identifier))
+            .Select(r => new { r.Id, r.Identifier, r.BodyVisibility })
+            .ToListAsync(cancellationToken);
+
+        var reporterIds = reporters.Select(r => r.Id).ToList();
+
+        var latestIds = await database.Messages
+            .Where(m => reporterIds.Contains(m.ReporterId))
+            .GroupBy(m => m.ReporterId)
+            .Select(g => g.Max(m => m.Id))
+            .ToListAsync(cancellationToken);
+
+        var latest = await database.Messages
+            .AsNoTracking()
+            .Where(m => latestIds.Contains(m.Id))
+            .Select(m => new { m.ReporterId, m.Status, m.Body, m.NextExpectedAt })
+            .ToListAsync(cancellationToken);
+
+        var byReporter = latest.ToDictionary(m => m.ReporterId);
+
+        var byIdentifier = new Dictionary<string, ProbeMessageResponse>(StringComparer.Ordinal);
+
+        foreach (var reporter in reporters)
+        {
+            if (!byReporter.TryGetValue(reporter.Id, out var message))
+            {
+                continue;
+            }
+
+            var body = reporter.BodyVisibility is MessageBodyVisibility.Reader ? message.Body : null;
+
+            if (body is { Length: > ReaderBodyMaxLength })
+            {
+                body = body[..ReaderBodyMaxLength];
+            }
+
+            byIdentifier[reporter.Identifier] = new ProbeMessageResponse(
+                message.Status,
+                message.NextExpectedAt is { } due && now > due,
+                body);
+        }
+
+        return probes
+            .Where(p => p.Kind == ProbeKind.Message && byIdentifier.ContainsKey(p.Host))
+            .ToDictionary(p => p.Id, p => byIdentifier[p.Host]);
+    }
+
+    /// <summary>
+    /// How much of a reader-visible body travels on a payload the dashboard polls every 30
+    /// seconds. A reporter meant for readers sends a line, not a log.
+    /// </summary>
+    private const int ReaderBodyMaxLength = 2_000;
 
     /// <summary>
     /// The 30-day (<see cref="MonitoringOptions.RetentionWindowDays"/>) window split into
@@ -165,7 +251,16 @@ internal static class StatusEndpoints
 
     public sealed record ProbeStatusResponse(
         Guid Id, string Name, ProbeKind Kind, ProbeStatus State, string? Detail,
-        DateTimeOffset? LastCheckedAt, double? UptimePercent, double[] Sparkline);
+        DateTimeOffset? LastCheckedAt, double? UptimePercent, double[] Sparkline,
+        ProbeMessageResponse? Message);
+
+    /// <summary>
+    /// Present only on a <see cref="ProbeKind.Message"/> probe whose reporter has reported at
+    /// least once. The status and the overdue flag are what the dashboard's chip word needs — a
+    /// reporter that claimed nothing reads "Reported", not "Succeeded" — and <c>Body</c> is null
+    /// unless its reporter is reader-visible.
+    /// </summary>
+    public sealed record ProbeMessageResponse(MessageStatus Status, bool Overdue, string? Body);
 
     public sealed record ProbeGroupSummary(Guid Id, string Name, Guid[] ProbeIds);
 }

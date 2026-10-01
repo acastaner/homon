@@ -120,6 +120,12 @@ internal static class ProbeEndpoints
             return httpOptionsError;
         }
 
+        var hostError = await ValidateHostForKindAsync(database, kind, host, cancellationToken);
+        if (hostError is not null)
+        {
+            return hostError;
+        }
+
         var groupIds = (request.GroupIds ?? []).Distinct().ToArray();
         var groupsError = await ValidateGroupIdsAsync(database, groupIds, cancellationToken);
         if (groupsError is not null)
@@ -180,6 +186,12 @@ internal static class ProbeEndpoints
         if (httpOptionsError is not null)
         {
             return httpOptionsError;
+        }
+
+        var hostError = await ValidateHostForKindAsync(database, probe.Kind, host, cancellationToken);
+        if (hostError is not null)
+        {
+            return hostError;
         }
 
         var groupIds = (request.GroupIds ?? []).Distinct().ToArray();
@@ -369,6 +381,27 @@ internal static class ProbeEndpoints
         return errors.Count > 0 ? TypedResults.ValidationProblem(errors) : null;
     }
 
+    /// <summary>
+    /// A <see cref="ProbeKind.Message"/> probe's host is the identifier of the reporter it
+    /// watches (plan 021, Decision 3), so it has to name one that exists — a typo would
+    /// otherwise create a probe that can only ever read Unknown. Every other kind's host is a
+    /// name on the network, which Homon cannot verify and does not try to.
+    /// </summary>
+    private static async Task<ValidationProblem?> ValidateHostForKindAsync(
+        HomonDbContext database, ProbeKind kind, string host, CancellationToken cancellationToken)
+    {
+        if (kind is not ProbeKind.Message
+            || await database.Reporters.AnyAsync(r => r.Identifier == host, cancellationToken))
+        {
+            return null;
+        }
+
+        return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["host"] = ["No reporter has this identifier. Add the reporter first, under Reporters."],
+        });
+    }
+
     private static ValidationProblem? ValidateKind(string? kind, out ProbeKind parsedKind)
     {
         var trimmed = kind?.Trim();
@@ -385,13 +418,19 @@ internal static class ProbeEndpoints
             return null;
         }
 
+        if (string.Equals(trimmed, "message", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedKind = ProbeKind.Message;
+            return null;
+        }
+
         parsedKind = default;
 
         // "smb"/"snmp" ship with plans 004/005, not this session — still rejected, but with
         // their own detail rather than the generic "must be" message.
         var detail = trimmed is "smb" or "snmp"
             ? $"Probe kind '{trimmed}' ships with a later plan and is not accepted yet."
-            : "Probe kind must be 'ping' or 'http'.";
+            : "Probe kind must be 'ping', 'http' or 'message'.";
 
         return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["kind"] = [detail] });
     }
