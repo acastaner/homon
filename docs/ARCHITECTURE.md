@@ -538,7 +538,9 @@ section by the accessible name its heading supplies through `aria-labelledby`;
 naive 12px-tall heading button would fail. The last of those is why the button carries
 `min-h-10 min-w-10` even though it costs the design brief's "section label sits 10px above
 its panel" — the tap-target floor is enforced by the gate, the 10px is enforced by nobody, so
-the floor wins. Collapse itself is the `hidden` attribute on a wrapper `<div>` that always
+the floor wins. §3.23 later added two more controls to that header row; they are siblings of the
+`<h2>`, never children, and every constraint in this paragraph still holds unchanged.
+Collapse itself is the `hidden` attribute on a wrapper `<div>` that always
 exists (never a conditional render), because `aria-controls` has to point at a real element,
 and that wrapper takes no Tailwind display utility — `flex`/`grid`/`block` all beat
 `[hidden]`'s `display: none` and would leave a "collapsed" section still on screen.
@@ -557,6 +559,109 @@ toggle, not a household setting — nothing changes under `src/Homon.Api/`,
 endpoint. Moving it server-side later, so every browser in a household opened the same
 arrangement, would be a different decision with its own migration, not an extension of this
 one.
+
+### 3.23 The dashboard's section order is this browser's too, and an empty section is not a section
+
+Plan 019 extends §3.22 — it does not supersede it. Two changes to `/`, both SPA-only: an empty
+ungrouped section stops rendering, and a reader can put the sections in whatever order they like,
+remembered per browser (`src/Homon.Web/src/lib/section-order.ts`).
+
+**An empty section is not a section.** `dashboardSections` used to append the ungrouped section
+unconditionally, so a household that had put every probe in a group saw an "Other" heading above a
+"No probes yet. An administrator adds them under Admin → Probes" panel that was simply false. The
+rule is not new — the API already refuses to send a group with no members
+(`StatusEndpoints.cs`'s `.Where(g => g.Members.Count > 0)`), so this makes the SPA agree with the
+server rather than inventing a policy. The guard is `ungrouped.length > 0 || groups.length === 0`,
+and it tests the **resolved** probes rather than the id count, because `resolve()` drops an id with
+no matching probe and a stale id would otherwise keep the section alive. The second half of that
+condition is load-bearing: with zero groups *and* zero probes the section is still returned,
+labelled "Services", because that one **is** the bare install's onboarding hint and is the only
+thing a fresh deployment has to look at. `e2e/layout.spec.ts` asserts it, and two whole-object
+assertions in `lib/status.test.ts` pin it.
+
+The label was left as "Other" (and "Services" when it is the only section) on the maintainer's
+call, though the request called it "Others" — plan 002's Decision 7 chose it and
+`e2e/dashboard-groups.spec.ts` matches heading text exactly, so renaming costs spec edits for no
+functional gain.
+
+**A second key, against plan 018's own advice.** 018's maintenance notes said that if the stored
+value ever had to grow, the array should be widened into an object under the one key, and that a
+second key must not be introduced. This is the growth it anticipated, and it took the second key
+anyway: `homon-section-order`. Collapse and order are two preferences with two independent defaults
+and, decisively, two independent "back to default" states, and one key would give them one
+lifetime. `e2e/dashboard-collapse.spec.ts` asserts that `homon-collapsed-sections` is `null` once
+every section is expanded again — a truthful signal that stops being true the moment a stored order
+keeps the key alive, after which that `null` means "no collapse *and* no custom order" to everyone
+who ever reads it. Two keys keep each signal honest and leave a landed feature's module and its six
+tests untouched. The cost is one more `try`/`catch`, which is the same trade 018 itself made when it
+declined to merge with `lib/theme.ts`.
+
+**A sequence is not a set, in three places.** The two modules look like siblings and are not the
+same shape, and each difference is a bug somebody will reintroduce by making them symmetrical:
+
+- The 50-id cap is `slice(0, 50)` here, not `slice(-50)`. A set's newest entries are the
+  interesting ones; an order's whole meaning is its front, and keeping the tail would forget where
+  the top sections go while faithfully remembering the bottom ones.
+- Deduping keeps the **first** occurrence, because the first position is the one the reader chose.
+- "Back to default" is a comparison against the natural order (`isNaturalOrder`), not an emptiness
+  check. An order can be a full list of every id and still be the natural one, so without the
+  comparison, undoing your only move would leave the key in storage spelling the natural order out
+  — exactly the "used, then reset, but it looks different in dev tools" state §3.22 argues against.
+
+**A swap, not a relocation.** Moving a section exchanges it with the section **visible** next to it
+— what a reader can see is what "up" means — and the write exchanges exactly those two ids in the
+stored list, touching no others. The obvious alternative, lifting the id out and splicing it in
+beside its neighbour, is not invertible: with `["links","pages","weather"]` stored and `pages`
+absent from the page because nothing is published, moving `weather` up and straight back down
+returns the visible order but leaves `pages` one position lower than it started. Every arrange
+session would nudge the sections a reader cannot see. Only a swap is its own inverse, and only a
+swap preserves an absent section's slot; `swapSectionIds` has a test named for each property.
+
+**Hydration, pruning, and where a new section appears.** The stored value is pruned to ids that
+still exist and extended with every known id it has not seen, so every known id appears exactly
+once — which is what makes a swap total. A section whose id the stored order has never met keeps its
+natural relative position and goes to the **end**, so a probe group created after a reader arranged
+the dashboard turns up below Weather until it is moved. That is one stable sort with no special
+case, it agrees with hydration, and the Reset order control answers it in one click; anchoring a new
+group beside its natural neighbours is a fiddly rule for a case that already has an answer.
+
+**The prune list is no longer derived from the rendered sections, and that is the sharp edge the two
+changes create together.** `knownSectionIds` in `dashboard-page.tsx` is built from
+`status.data.groups` with `'ungrouped'`, `'links'`, `'pages'` and `'weather'` as literals — not, as
+it was, from `dashboardSections`'s output. Once an empty ungrouped section stops rendering, deriving
+the list from what renders drops `'ungrouped'` out of it, and the next press of any other section's
+control prunes that section's remembered collapse *and* its order slot. Nothing in the suite would
+have caught it. A section id belongs in this list because it *can* exist, never because it is on
+screen; that is also why `'pages'` stays in it while nothing is published.
+
+**Arrange mode is not persisted, and is not a preference.** It is a mode a reader is in, and one key
+per concern is the budget — a browser that reopened the dashboard mid-arrangement would greet
+somebody who only wanted to know whether the NAS is up with two extra controls on every section. It
+is plain React state, gone on reload, and `e2e/dashboard-arrange.spec.ts` asserts that.
+
+**Up/down buttons, not drag-and-drop.** Every reorder surface in this app already works this way
+(`admin-links-page.tsx`, `admin-probes-page.tsx`, `admin-probe-groups-page.tsx`), it needs no new
+dependency, and it is the only pattern that clears the 40px tap-target floor and works with a
+keyboard and a screen reader without a parallel implementation. The controls are typed props on
+`CollapsibleSection` rather than a free-form `headerActions?: ReactNode` slot, because that
+component's comment claims ownership of the floor and a slot would let a caller drop an undersized
+button into the header row and turn `e2e/refresh.spec.ts` red from a different file. Their
+accessible name comes from a stable `label` — "Move Weather up", never "Move Weather · Kitchen up"
+— so a name the tests and a screen reader depend on cannot change when an administrator renames the
+weather location. One page-level Reset order, not one per section: the action clears a single key,
+and N buttons sharing that name is an immediate strict-mode ambiguity.
+
+**Still no server-side state.** This is a display preference, the same class as the theme toggle,
+and it now layers over the household-wide group order that `PUT /api/v1/probe-groups/order` already
+sets: that remains the natural order every browser starts from, and this is one browser's view of
+it. §3.22's closing paragraph already ruled that moving either preference server-side would be a
+different decision with its own migration; the same sentence covers this one.
+
+**One accepted limitation.** Because the API hides a group with no members, emptying a group removes
+its id from the prune list and drops its arranged slot; refilling it later puts it back at the
+bottom. The ungrouped section does not have this problem — it is a literal in the list. The
+alternative, never pruning, is worse: a stale id at the head of the order would survive the cap and
+evict a live one.
 
 ## 4. Things this record does not yet decide
 
