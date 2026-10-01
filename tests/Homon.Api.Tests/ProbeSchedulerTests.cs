@@ -138,6 +138,56 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
         Assert.Equal(2, await database.ProbeObservations.CountAsync(o => o.ProbeId == probe.Id));
     }
 
+    [DatabaseFact]
+    public async Task A_derived_status_overrides_what_the_streak_counters_imply()
+    {
+        // A message probe's authority is the reporter's own verdict: one "warning" report must
+        // stay Unstable rather than accumulating into Down as the same message is re-read on
+        // every tick (plan 021, Decision 5). The counters still advance underneath it.
+        // A zero poll interval so every tick is due against the fixed clock: three polls of the
+        // same warning would be Down by the second one without the derived status, since the
+        // seeded FailureThreshold is 2.
+        var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero);
+        var runner = new FakeProbeRunner((_, _) =>
+            Task.FromResult(new ProbeResult(false, null, "message: warning, reported 2026-01-01 00:00Z", ProbeStatus.Unstable)));
+
+        var scheduler = BuildScheduler(runner, Epoch);
+        await scheduler.TickAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+        Assert.Equal(ProbeStatus.Unstable, reloaded.Status);
+        Assert.Equal(3, reloaded.ConsecutiveFailureCount);
+        Assert.Equal(3, await database.ProbeObservations.CountAsync(o => o.ProbeId == probe.Id));
+    }
+
+    [DatabaseFact]
+    public async Task A_derived_unknown_records_no_observation_but_still_stamps_the_probe()
+    {
+        // "No verdict" (plan 021, A1): recording an observation would give uptime a denominator
+        // it has not earned, and leaving LastObservedAt null would re-dispatch the probe on
+        // every five-second tick forever.
+        var probe = await SeedProbeAsync(lastObservedAt: null);
+        var runner = new FakeProbeRunner((_, _) =>
+            Task.FromResult(new ProbeResult(false, null, "message: no report received yet", ProbeStatus.Unknown)));
+
+        var scheduler = BuildScheduler(runner, Epoch);
+        await scheduler.TickAsync(CancellationToken.None);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+        Assert.Equal(ProbeStatus.Unknown, reloaded.Status);
+        Assert.Equal(Epoch, reloaded.LastObservedAt);
+        Assert.Equal("message: no report received yet", reloaded.LastDetail);
+        Assert.Equal(0, await database.ProbeObservations.CountAsync(o => o.ProbeId == probe.Id));
+    }
+
     private async Task<Probe> SeedProbeAsync(
         DateTimeOffset? lastObservedAt, bool isPaused = false, TimeSpan? pollInterval = null)
     {
