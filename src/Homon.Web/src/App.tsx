@@ -6,6 +6,7 @@ import { RequireAdministrator } from '@/components/require-administrator'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { PagePage } from '@/pages/page-page'
 import { SignInPage } from '@/pages/sign-in-page'
+import { WeatherPage } from '@/pages/weather-page'
 
 // The admin pages are code-split: the family never loads them, and every one of them is
 // a table-and-form the dashboard bundle has no use for. Named exports everywhere else, so
@@ -34,6 +35,11 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="pages/:slug" element={<PagePage />} />
+        {/* A reader route, so statically imported like the dashboard and the pages view —
+            only the admin subtree is code-split. Reached from the dashboard's Weather
+            widget, not from the banner, whose two-item navigation must stay one row on a
+            phone (docs/design-brief.md, Shell). */}
+        <Route path="weather" element={<WeatherPage />} />
         <Route path="admin/sign-in" element={<SignInPage />} />
         <Route
           path="admin"

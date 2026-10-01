@@ -6,8 +6,10 @@ import { expect, test } from '@playwright/test'
  * … including the tinted rows") is exactly what axe's `color-contrast` rule checks against
  * rendered, computed styles — hand-verifying oklch pairs at design time (the token table)
  * does not catch a later CSS change quietly breaking a pair the brief promised. Scoped to
- * the dashboard, both for speed and because it is the surface the brief's contrast claim is
- * about (readers, glancing, sometimes in sunlight).
+ * the dashboard and the weather page, both for speed and because they are the surfaces the
+ * brief's contrast claim is about (readers, glancing, sometimes in sunlight) — and the
+ * weather page is where the tinted rows and advisory banners put status-coloured text on
+ * status-coloured grounds, which is the pair most likely to drift.
  */
 test.describe('colour contrast', () => {
   // Unconditional, not a step inside the light-scheme test itself: if that test's own
@@ -34,6 +36,46 @@ test.describe('colour contrast', () => {
     // The same mechanism e2e/theme.spec.ts uses to switch schemes — a real click on the
     // banner's toggle, not a direct localStorage/attribute poke.
     await page.getByRole('button', { name: 'Switch to light theme' }).click()
+
+    const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+
+    expect(results.violations).toEqual([])
+  })
+})
+
+/**
+ * The weather page needs a location before it renders anything but its empty state, and the
+ * pairs worth checking — advisory text on a tinted banner, a tinted table row — only exist
+ * once FakeWeatherProvider's planted gust run has produced an advisory.
+ */
+test.describe('colour contrast, weather page', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.put('/api/v1/weather/settings', {
+      data: { latitude: 51.5, longitude: -0.12, place: 'Test location', units: 'metric' },
+    })
+  })
+
+  test.afterEach(async ({ page, request }) => {
+    await request.delete('/api/v1/weather/settings', { data: {} })
+    await page.evaluate(() => {
+      window.localStorage.removeItem('homon-theme')
+      delete document.documentElement.dataset.theme
+    })
+  })
+
+  test('the weather page has no color-contrast violations, dark scheme', async ({ page }) => {
+    await page.goto('/weather')
+    await expect(page.getByRole('list', { name: 'Weather warnings' })).toBeVisible()
+
+    const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+
+    expect(results.violations).toEqual([])
+  })
+
+  test('the weather page has no color-contrast violations, light scheme', async ({ page }) => {
+    await page.goto('/weather')
+    await page.getByRole('button', { name: 'Switch to light theme' }).click()
+    await expect(page.getByRole('list', { name: 'Weather warnings' })).toBeVisible()
 
     const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
 

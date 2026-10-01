@@ -8,6 +8,38 @@ import { DashboardPage } from '@/pages/dashboard-page'
 import { renderWithProviders } from '@/test/render'
 import { stubFetch } from '@/test/fetch'
 
+/**
+ * One day of the weather payload. A helper because WeatherDayResponse carries ten fields
+ * since plan 020 and only four of them matter to any assertion here.
+ */
+function day(date: string, condition: string, high: number, low: number) {
+  return {
+    date,
+    condition,
+    high,
+    low,
+    precipitationSum: 0,
+    snowfallSum: 0,
+    windSpeedMax: 18,
+    windGustsMax: 30,
+    sunrise: '07:10',
+    sunset: '18:53',
+  }
+}
+
+/** The loaded-weather body the widget tests share. */
+const loadedWeather = {
+  place: 'Test location',
+  units: 'metric',
+  current: { temperature: 18.4, apparentTemperature: 17.2, windSpeed: 12.1, condition: 'clear', isDay: true },
+  today: day('2026-01-01', 'clear', 20, 12),
+  forecast: [day('2026-01-02', 'partlyCloudy', 19, 11)],
+  hourly: [],
+  warnings: [],
+  fetchedAt: '2026-01-01T00:00:00Z',
+  stale: false,
+}
+
 const statusWithASharedProbe = {
   '/api/v1/status': {
     body: {
@@ -152,11 +184,14 @@ describe('DashboardPage', () => {
           place: 'Test location',
           units: 'metric',
           current: { temperature: 18.4, apparentTemperature: 17.2, windSpeed: 12.1, condition: 'clear', isDay: true },
+          today: day('2026-01-01', 'clear', 20, 12),
           forecast: [
-            { date: '2026-01-02', condition: 'partlyCloudy', high: 19, low: 11 },
-            { date: '2026-01-03', condition: 'clear', high: 21, low: 12 },
-            { date: '2026-01-04', condition: 'rain', high: 16, low: 9 },
+            day('2026-01-02', 'partlyCloudy', 19, 11),
+            day('2026-01-03', 'clear', 21, 12),
+            day('2026-01-04', 'rain', 16, 9),
           ],
+          hourly: [],
+          warnings: [],
           fetchedAt: '2026-01-01T00:00:00Z',
           stale: false,
         },
@@ -179,6 +214,55 @@ describe('DashboardPage', () => {
       'href',
       'https://open-meteo.com/',
     )
+  })
+
+  it("shows today's high and low, which the current temperature cannot give", async () => {
+    stubFetch({ ...statusWithASharedProbe, '/api/v1/weather': { body: loadedWeather } })
+    renderWithProviders(<DashboardPage />)
+
+    const weather = await screen.findByRole('region', { name: 'Weather · Test location' })
+
+    // Without the unit symbol, deliberately — the 18°C beside it carries it (plan 020, D11).
+    expect(within(weather).getByText(/20° \/ 12°/)).toBeInTheDocument()
+  })
+
+  it('links the widget to the full weather page, leaving the attribution outside the link', async () => {
+    stubFetch({ ...statusWithASharedProbe, '/api/v1/weather': { body: loadedWeather } })
+    renderWithProviders(<DashboardPage />)
+
+    const weather = await screen.findByRole('region', { name: 'Weather · Test location' })
+
+    const link = within(weather).getByRole('link', { name: 'Weather for Test location, full forecast' })
+    expect(link).toHaveAttribute('href', '/weather')
+
+    // The Open-Meteo credit is a sibling, not a descendant: nested anchors are invalid HTML
+    // and the credit has to stay independently reachable.
+    expect(link).not.toContainElement(within(weather).getByRole('link', { name: 'Open-Meteo.com' }))
+  })
+
+  it('shows only three forecast rows even though the payload carries seven', async () => {
+    stubFetch({
+      ...statusWithASharedProbe,
+      '/api/v1/weather': {
+        body: {
+          ...loadedWeather,
+          forecast: [
+            day('2026-01-02', 'partlyCloudy', 19, 11),
+            day('2026-01-03', 'clear', 21, 12),
+            day('2026-01-04', 'rain', 16, 9),
+            day('2026-01-05', 'clear', 20, 10),
+            day('2026-01-06', 'cloudy', 17, 9),
+            day('2026-01-07', 'clear', 18, 10),
+            day('2026-01-08', 'drizzle', 15, 8),
+          ],
+        },
+      },
+    })
+    renderWithProviders(<DashboardPage />)
+
+    const weather = await screen.findByRole('region', { name: 'Weather · Test location' })
+
+    expect(within(weather).getAllByRole('listitem')).toHaveLength(3)
   })
 
   it('shows an unavailable message on a 503 problem response', async () => {
@@ -369,14 +453,7 @@ describe('DashboardPage', () => {
     stubFetch({
       ...statusWithASharedProbe,
       '/api/v1/weather': {
-        body: {
-          place: 'Test location',
-          units: 'metric',
-          current: { temperature: 18.4, apparentTemperature: 17.2, windSpeed: 12.1, condition: 'clear', isDay: true },
-          forecast: [{ date: '2026-01-02', condition: 'clear', high: 19, low: 11 }],
-          fetchedAt: '2026-01-01T00:00:00Z',
-          stale: false,
-        },
+        body: { ...loadedWeather, forecast: [day('2026-01-02', 'clear', 19, 11)] },
       },
     })
     renderWithProviders(<DashboardPage />)

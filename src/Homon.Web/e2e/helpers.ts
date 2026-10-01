@@ -4,6 +4,7 @@ import { expect, type Page } from '@playwright/test'
 export const READER_ROUTES = [
   { path: '/', name: 'the dashboard' },
   { path: '/pages/welcome', name: 'a page' },
+  { path: '/weather', name: 'the weather page' },
   { path: '/admin/sign-in', name: 'the sign-in form' },
 ] as const
 

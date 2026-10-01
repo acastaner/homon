@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { Link as RouterLink } from 'react-router'
 
 import { CollapsibleSection } from '@/components/collapsible-section'
@@ -20,11 +21,13 @@ import {
 } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 import {
+  formatForecastDay,
+  unitSymbol,
   useWeather,
   weatherConditionIcon,
   WEATHER_CONDITION_LABEL,
+  windUnit,
   type Weather,
-  type WeatherUnitsValue,
 } from '@/lib/weather'
 
 /**
@@ -85,24 +88,6 @@ function detailClassName(state: ProbeState): string {
     return 'font-medium text-unstable'
   }
   return 'text-muted'
-}
-
-function unitSymbol(units: WeatherUnitsValue): string {
-  return units === 'imperial' ? '°F' : '°C'
-}
-
-function windUnit(units: WeatherUnitsValue): string {
-  return units === 'imperial' ? 'mph' : 'km/h'
-}
-
-/**
- * Parses `date` (an ISO calendar date, e.g. "2026-09-16") as local calendar components, not
- * `new Date(dateString)` — the latter constructs UTC midnight, which renders as the
- * *previous* day in a negative-offset timezone.
- */
-function formatForecastDay(date: string): string {
-  const [year, month, day] = date.split('-').map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short' })
 }
 
 
@@ -244,40 +229,61 @@ function weatherSectionBody(
   const CurrentIcon = weatherConditionIcon(weather.current.condition)
 
   return (
-    <div className={`${PANEL} p-4`}>
-      <div className="flex items-center gap-3.5 pb-3">
-        <CurrentIcon aria-hidden="true" strokeWidth={1.5} className="size-10 shrink-0 text-muted" />
-        <div className="flex flex-col gap-0.5">
-          <p className="mono text-[28px] leading-none font-medium sm:text-[30px]">
-            {Math.round(weather.current.temperature)}
-            {unitSymbol(weather.units)}
-          </p>
-          <p className="text-[14px] text-muted">
-            {WEATHER_CONDITION_LABEL[weather.current.condition]} · Wind{' '}
-            {Math.round(weather.current.windSpeed)} {windUnit(weather.units)} · Feels like{' '}
-            {Math.round(weather.current.apparentTemperature)}
-            {unitSymbol(weather.units)}
-          </p>
-        </div>
-      </div>
-      <ul className="divide-y divide-line">
-        {weather.forecast.map((day) => {
-          const DayIcon = weatherConditionIcon(day.condition)
-          return (
-            <li key={day.date} className="flex items-center gap-2.5 py-2 text-[14px]">
-              <span className="w-10 text-muted">{formatForecastDay(day.date)}</span>
-              <DayIcon aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0 text-muted" />
-              <span>{WEATHER_CONDITION_LABEL[day.condition]}</span>
-              <span className="mono ml-auto font-medium">
-                {Math.round(day.high)}
-                {unitSymbol(weather.units)}/{Math.round(day.low)}
+    <div className={PANEL}>
+      {/* One link wraps the data and stops short of the attribution below it: nesting the
+          Open-Meteo anchor inside this one would be invalid HTML, and the credit has to stay
+          independently reachable. The accessible name says where it goes, not what it shows. */}
+      <RouterLink
+        to="/weather"
+        aria-label={weather.place ? `Weather for ${weather.place}, full forecast` : 'Weather, full forecast'}
+        className="block rounded-md p-4 no-underline hover:bg-bg"
+      >
+        <div className="flex items-start gap-3.5 pb-3">
+          <CurrentIcon aria-hidden="true" strokeWidth={1.5} className="size-10 shrink-0 text-muted" />
+          <div className="flex flex-col gap-0.5">
+            <p className="flex flex-wrap items-baseline gap-x-3">
+              <span className="mono text-[28px] leading-none font-medium sm:text-[30px]">
+                {Math.round(weather.current.temperature)}
                 {unitSymbol(weather.units)}
               </span>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="pt-3 text-[12.5px] text-muted">
+              {/* Today's extremes, deliberately without the unit symbol: the current
+                  temperature carries it three characters away. The three forecast rows below
+                  keep theirs, because the unit and vitest suites match those exact strings
+                  and renaming them is not this change's business (plan 020, D11). */}
+              <span className="mono text-[17px] leading-none font-medium text-muted">
+                {Math.round(weather.today.high)}° / {Math.round(weather.today.low)}°
+              </span>
+            </p>
+            <p className="text-[14px] text-muted">
+              {WEATHER_CONDITION_LABEL[weather.current.condition]} · Wind{' '}
+              {Math.round(weather.current.windSpeed)} {windUnit(weather.units)} · Feels like{' '}
+              {Math.round(weather.current.apparentTemperature)}
+              {unitSymbol(weather.units)}
+            </p>
+          </div>
+          <ChevronRight aria-hidden="true" strokeWidth={2} className="ml-auto size-[18px] shrink-0 text-muted" />
+        </div>
+        <ul className="divide-y divide-line">
+          {/* The widget shows three days, not all seven: the forecast grew with plan 020 and
+              this panel is a glance, not the page behind it. */}
+          {weather.forecast.slice(0, 3).map((day) => {
+            const DayIcon = weatherConditionIcon(day.condition)
+            return (
+              <li key={day.date} className="flex items-center gap-2.5 py-2 text-[14px]">
+                <span className="w-10 text-muted">{formatForecastDay(day.date)}</span>
+                <DayIcon aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0 text-muted" />
+                <span>{WEATHER_CONDITION_LABEL[day.condition]}</span>
+                <span className="mono ml-auto font-medium">
+                  {Math.round(day.high)}
+                  {unitSymbol(weather.units)}/{Math.round(day.low)}
+                  {unitSymbol(weather.units)}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      </RouterLink>
+      <p className="px-4 pb-3.5 text-[12.5px] text-muted">
         Weather data by{' '}
         <a
           href="https://open-meteo.com/"
