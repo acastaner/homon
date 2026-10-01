@@ -1,6 +1,7 @@
 using System.Net.Security;
 using Homon.Infrastructure.Administration;
 using Homon.Infrastructure.Email;
+using Homon.Infrastructure.Messaging;
 using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Pages;
 using Homon.Infrastructure.Persistence;
@@ -48,6 +49,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHomonEmail(configuration, isProduction);
         services.AddAdministrator(configuration);
         services.AddHomonMonitoring(configuration);
+        services.AddHomonMessaging(configuration);
         services.AddPages();
         services.AddWeather(configuration, isProduction);
 
@@ -141,6 +143,20 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IPasswordHasher<AdministratorIdentity>,
             PasswordHasher<AdministratorIdentity>>();
         services.AddSingleton<AdministratorAuthenticator>();
+    }
+
+    private static void AddHomonMessaging(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<MessagingOptions>()
+            .Bind(configuration.GetSection(MessagingOptions.SectionName))
+            .ValidateOnStart();
+
+        // Scoped like every other IProbeRunner — this one needs the DbContext. It lives under
+        // Messaging/ rather than Monitoring/ because the Messaging module owns the derivation;
+        // Monitoring owns only the interface it plugs into.
+        services.AddScoped<IProbeRunner, MessageProbeRunner>();
+
+        services.AddHostedService<MessageRetentionService>();
     }
 
     private static void AddHomonMonitoring(this IServiceCollection services, IConfiguration configuration)

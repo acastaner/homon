@@ -39,6 +39,14 @@ public sealed class Reporter
 
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// <see cref="Normalize"/> of <see cref="Name"/>, kept unique so two reporters cannot differ
+    /// only by case — <c>ProbeGroup</c>'s pattern. Load-bearing for the admin page as well as the
+    /// database: a unique name is what lets every row control be named "Edit {name}" without a
+    /// disambiguating suffix, which is what Playwright's strict mode needs with N rows.
+    /// </summary>
+    public string NormalizedName { get; set; } = string.Empty;
+
     public string? Description { get; set; }
 
     /// <summary>
@@ -58,4 +66,6 @@ public sealed class Reporter
     public DateTimeOffset CreatedAt { get; set; }
 
     public ICollection<Message> Messages { get; } = [];
+
+    public static string Normalize(string name) => name.Trim().ToUpperInvariant();
 }

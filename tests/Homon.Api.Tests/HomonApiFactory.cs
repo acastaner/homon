@@ -62,6 +62,9 @@ public class HomonApiFactory : WebApplicationFactory<Program>
                 // directly, never through the hosted loop.
                 ["Monitoring:SchedulerEnabled"] = "false",
                 ["Monitoring:RetentionEnabled"] = "false",
+
+                // Plan 021's message sweep, for exactly the same reason.
+                ["Messaging:RetentionEnabled"] = "false",
             }));
     }
 }

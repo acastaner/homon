@@ -1,5 +1,6 @@
 using Homon.Domain.Auth;
 using Homon.Domain.Links;
+using Homon.Domain.Messaging;
 using Homon.Domain.Monitoring;
 using Homon.Domain.Pages;
 using Homon.Domain.Weather;
@@ -13,8 +14,7 @@ namespace Homon.Infrastructure.Persistence;
 /// <summary>
 /// The application's single database context: ASP.NET Core Identity's user and role
 /// tables, the API keys, the probes and their groups, the household's links, the
-/// administrator's pages, the weather location, and — as each module lands — the backup
-/// reports.
+/// administrator's pages, the weather location, and the push reporters and their messages.
 /// </summary>
 /// <remarks>
 /// Derives from <see cref="IdentityDbContext{TUser, TRole, TKey}"/> so the role tables
@@ -37,6 +37,10 @@ public class HomonDbContext(DbContextOptions<HomonDbContext> options)
     public DbSet<Page> Pages => Set<Page>();
 
     public DbSet<WeatherSettings> WeatherSettings => Set<WeatherSettings>();
+
+    public DbSet<Reporter> Reporters => Set<Reporter>();
+
+    public DbSet<Message> Messages => Set<Message>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
