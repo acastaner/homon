@@ -95,8 +95,26 @@ jobs:
           # hostname to inline. Harmless for the api image, which declares no such arg.
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.value }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No `cache-from`/`cache-to: type=gha`. It was removed on 2026-10-01 after the
+          # v0.2.0 release took 18 minutes against the previous release's 5, all of it in
+          # this one step. The breakdown from that run's log, job 110299248967:
+          #
+          #   base image pulls     ~2s
+          #   npm ci (cold)        10.6s
+          #   npm run build        2.1s
+          #   push to GHCR         8.7s      <- image finished, 25s into the step
+          #   exporting to GHA cache  1048s  <- 17.5 minutes, after the image was already out
+          #
+          # The export stalled 1011s on a single 1.84 MiB blob; the api image ran the
+          # identical export in 28.7s in the same minute, so it was a transient fault in
+          # GitHub's cache service rather than anything about this repository.
+          #
+          # It is not worth re-adding. A completely cold web build is ~25 seconds of real
+          # work, and the *cached* v0.1.2 build took 61s — so the cache never paid for
+          # itself, while putting a service that can hang for 17 minutes on the critical
+          # path of every release, after the image has already been pushed. Caches also
+          # expire after 7 days unused, so any release following a quiet fortnight was
+          # always going to be a cold build anyway.
 
   publish-release:
     name: Publish the GitHub Release
