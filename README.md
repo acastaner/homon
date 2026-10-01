@@ -9,9 +9,10 @@ Nothing about your house is hard-coded. Every probe, link and page is added by t
 administrator through the admin pages; anyone on the trusted network reads the dashboard
 without signing in (a switch closes it if you want that).
 
-**Status: phase 0 — scaffolding.** The plumbing is complete and the gate is green, but no
-module has landed yet. `docs/MODULES.md` is the roadmap; `docs/design-brief.md` is what the
-design pass works from.
+**Status: in use.** Monitoring (ping and HTTP probes, groups, uptime), links, pages, the weather
+page and the message gateway have landed, dark-by-default and styled; SMB and SNMP probes, the
+family calendar and email alerts have not. `docs/MODULES.md` is the roadmap;
+`docs/design-brief.md` is what the design pass works from.
 
 ## Stack
 
@@ -52,7 +53,8 @@ skipped. `ci/README.md` explains it.
 | --- | --- |
 | `docs/ARCHITECTURE.md` | The decision record: what was chosen, what was rejected, why. |
 | `docs/STACK.md` | Languages, versions, conventions, and which agent skills apply. |
-| `docs/MODULES.md` | The six modules that are not built yet, their requirements, and the constraints already known. |
+| `docs/MODULES.md` | The modules, their requirements, and the constraints already known. |
+| `docs/message-reporting.md` | How a script on another host reports to Homon, and what each field does. |
 | `docs/design-brief.md` | The brief for the design pass. |
 | `docs/postgres-setup-dev.md` | The development database. |
 | `docs/deployment-runbook.md` | Production on the household's server. |

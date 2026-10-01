@@ -23,6 +23,21 @@
 
 ## Status
 
+> **Re-pointed by plan 021 (2026-10-01).** Plan 008 is REJECTED, so `BackupJob`, `BackupRun` and
+> `BackupJobEvaluator` do not exist and this plan's first-step STOP condition naming them is void —
+> check only `IAlertEmailSender` and `EmailOptions`. **Step 8, its `AddBackupAlertState` migration,
+> its `BackupJob.LastNotifiedState` column and `BackupAlertWatcher` are all unnecessary.** A
+> reporter is watched by a real `Probe` of kind `Message`, so its overdue and failed transitions
+> already travel this plan's own `ProbeTransition` seam from Steps 1–7: there is no "became late
+> with no event to hook", because the scheduler polls every message probe on its own interval and
+> `Homon.Domain.Messaging.MessageProbeEvaluator.Evaluate` turns overdueness into a failed
+> observation. One consequence survives: such an alert's subject reads
+> `[Homon] {probe name} is down`, in the probe vocabulary, not `[Homon] Backup {name} is late`, so
+> Decision 8's two backup trigger words collapse into the probe ones. Note also that 002 and 021
+> both landed `BackgroundService`s, so this plan is no longer the first.
+>
+> **Depends on** is now 002 and 021, not 002 and 008.
+
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED — the only `BackgroundService` in the codebase so far, and it hooks a

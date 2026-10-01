@@ -812,3 +812,66 @@ gets **no** `HasDefaultValue`: `Administrator` is the CLR default, and a SQL def
 EF omit the column from inserts. `GET /reporters/{id}/messages` takes `?limit=` (1–200,
 default 50). `docs/deployment-runbook.md`'s "mint a read-write key by hand for the backup
 scripts" paragraph is stale and joins the docs step.
+
+## Execution notes (2026-10-01, branch `plan/021-message-gateway`)
+
+**All three suites pass, one at a time, with 0 skips**: `web` (167 vitest), `api` (475 xunit),
+`e2e` (113 Playwright across both viewports, run twice to check the one timing-sensitive
+assertion). The combined `./ci/run-ci.sh` was not used, per this machine's known abort.
+
+**What changed against the plan as written.**
+
+1. **A1 landed as planned and is the one real surprise this plan held.** The design review caught
+   that D5 as originally written would have recorded a *failed* observation for a reporter that had
+   never reported, dragging its uptime to 0.00% when §3.16 promises an em dash. The fix — the
+   scheduler skips the observation row when the derived status is `Unknown` — is three lines and no
+   migration. `ProbeResult.Succeeded` was **not** made nullable; the derived status already carries
+   the distinction, and the nullable version could not express D6's `Warning → Unstable` row at all.
+2. **`?limit=0` falls back to the default rather than clamping to one row.** Clamping to `[1, 200]`
+   was the first implementation and made `?limit=0` return a single message, which reads like a bug
+   in the data rather than a rejected argument.
+3. **`src/test/fetch.ts` gained a method-qualified key** (`'POST /api/v1/reporters'`), additively.
+   Creating a reporter answers with the reporter *and its one-time key* while listing them answers
+   with an array, and a single body per path cannot express both. Existing fixtures are untouched.
+4. **One existing assertion was edited rather than extended**: `admin-probes-page.test.tsx`'s kind
+   select now expects three options. That is the deliberate consequence of adding a creatable kind,
+   not drift.
+5. **`Message.Truncated` is derived from the marker, not stored.** The architect's design had a
+   column; the marker is already part of the stored text and cannot disagree with it, so
+   `MessageBody.WasTruncated` reads it instead and the migration stayed at two tables.
+6. **The reporters page's "Add a reporter" link is named that, not "Add one"** — the probes page
+   already has an "Add one" link to probe groups, and Playwright's strict mode refuses the
+   ambiguity.
+
+**What the running application caught that the tests did not.** The suites prove the derivation and
+the payload; they do not watch a reporter actually go silent, because the scheduler's clock is real.
+Run by hand against the throwaway database, with a probe polling every 15 seconds and a reporter
+promising `PT1M`:
+
+```
+16:29:40  state=up       uptime=100    message: success, reported 2026-10-01 14:28Z
+16:29:52  state=down     uptime=80     message: overdue — none since 2026-10-01 14:28Z, expected by 2026-10-01 14:29Z
+16:30:28  state=down     uptime=57.14  message: overdue — none since …
+   (reports again, promising PT1H)
+16:31:12  state=up       uptime=50     message: success, reported 2026-10-01 14:30Z
+   (reports status "unknown")
+16:31:29  state=unknown  uptime=50     message: status unknown, reported 2026-10-01 14:31Z
+16:31:46  state=unknown  uptime=50     message: status unknown, reported 2026-10-01 14:31Z
+```
+
+Three things that only a real clock shows:
+
+- The switch fires within one poll interval of the deadline, and the detail names **both**
+  timestamps — when it last reported and when it was due — which is exactly what an operator needs
+  at a glance and is more useful than the "overdue by 3 h" phrasing the review suggested.
+- **Uptime decays while a reporter is overdue** (100 → 80 → 66.67 → 57.14 → 50), because every tick
+  writes a failed observation. That is correct and meaningful — "how much of the retained window was
+  this backup healthy" — but it means a long outage walks a message probe's uptime towards 0, and
+  recovery does not restore the figure. Worth knowing before anybody reads the dashboard's aggregate
+  as "how reliable is the household".
+- **A1 is visible**: across the two `unknown` ticks, uptime does not move at all. No observation is
+  being written, which is the whole point of the no-verdict path.
+
+**Left for later, deliberately** (also in Maintenance notes): email alerting, which plan 009 now
+gets for free through the ordinary probe transition; a reader-facing history page; an idempotency
+key; structured fields beside the free-text body.

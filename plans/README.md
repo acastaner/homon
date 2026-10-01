@@ -96,8 +96,8 @@ reviews and merges the work.
 | 005 | planned | S | 002, 003 | SNMP probe scaffold |
 | 006 | DONE (2026-09-16, `191df56`) | M | — (reuses 002's ordering convention) | Links |
 | 007 | DONE (2026-09-16, `9b47556`) | M | — | Pages and the WYSIWYG editor |
-| 008 | planned | L | — | Backup reports and API-key administration |
-| 009 | planned | L | 002, 008 | Alerts by email |
+| 008 | REJECTED (superseded by 021) | L | — | Backup reports and API-key administration — the file stays for its reasoning, which 021 carries over by name |
+| 009 | planned | L | 002, 021 | Alerts by email |
 | 010 | DONE (2026-09-16, `c653799`) | M | — | Weather widget |
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
 | 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
@@ -109,10 +109,31 @@ reviews and merges the work.
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
 | 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
 | 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
+| 021 | IN PROGRESS | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
 deferred; 012 styles only what has landed and tells those plans how to reuse its primitives.
+**008 is now REJECTED**, superseded by 021 (2026-10-01): the generic message gateway does
+everything 008 specified and more, so `BackupJob`, `BackupRun` and `BackupJobEvaluator` will never
+exist. 021 carried over 008's load-bearing decisions by name — the reporter must exist first,
+bodies are truncated and never rejected, lateness is derived rather than tracked, and the report
+endpoint is rate-limited per key.
+
+**021 changed two things every later plan touching Monitoring must know.**
+`ProbeResult` gained an optional `DerivedStatus`, and a runner that supplies
+`ProbeStatus.Unknown` there means "no verdict" — the scheduler records no observation for it. Any
+plan adding an `IProbeRunner` has to decide whether its kind can reach no verdict. 021 also took
+`ProbeKind.Message`, additively: the column stores the name and carries no check constraint, so no
+migration was needed.
+
+**009's backup half is void.** Its Step 8, its `AddBackupAlertState` migration, its
+`BackupJob.LastNotifiedState` column and its `BackupAlertWatcher` background service are all
+unnecessary: a reporter is watched by a real `Probe`, so its overdue and failed transitions already
+travel 009's own `ProbeTransition` seam from Steps 1–7. The pure function behind them is
+`Homon.Domain.Messaging.MessageProbeEvaluator.Evaluate`. One consequence survives: such an alert's
+subject reads `[Homon] {probe name} is down`, in the probe vocabulary, not `[Homon] Backup {name}
+is late`.
 
 **015 and 016 are the first plans written from a real deployment rather than from the
 roadmap.** Homon went to its first production host on 2026-09-18 (`clockmaster`, rootless

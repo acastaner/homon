@@ -1,5 +1,22 @@
 # 008 — Backup reports and API-key administration
 
+> ## REJECTED — superseded by plan 021 (2026-10-01)
+>
+> **Do not execute this plan.** `plans/021-message-gateway-and-reporter-probes.md` built the same
+> machinery generically: a *reporter* files *messages*, and a backup is one with
+> `category: backup`. `BackupJob`, `BackupRun` and `BackupJobEvaluator` do not exist and will not.
+> The API-key administration half (slice A) did ship, in 021, as `ApiKeyEndpoints` and
+> `/admin/api-keys`.
+>
+> The file is kept for its reasoning, which 021 carried over by name: the reporter must exist
+> before it can report (a typo is a refusal, not a phantom job); a body is truncated at 64 KiB and
+> never rejected; lateness is derived rather than tracked as its own state; the report endpoint is
+> rate-limited per key, not per IP; log excerpts are administrator-only. What 021 did *not* carry
+> is `ExpectedInterval` and `Grace` — the reporter declares its own deadline, with its own
+> tolerance baked in, because it knows how late is too late and Homon does not.
+>
+> Everything below this box is the original plan, unedited.
+>
 > **Executor instructions**: Follow step by step. Run every verification command and confirm
 > the expected result before moving on. On a STOP condition, stop and report — do not
 > improvise. When done, update this plan's status row in `plans/README.md`.

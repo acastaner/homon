@@ -75,8 +75,11 @@ whole request (`ApiKeyRefusalMiddleware`) rather than being demoted to anonymous
 readers are anonymous by default, a revoked key would otherwise keep getting 200s from
 every read while its reports silently 401.
 
-Until the Backups module ships its admin page, `create-api-key --name …` is the minter. A key
-also carries a scope (read or read-write) and an optional expiry as of §3.13.
+`create-api-key --name …` was the only minter until plan 021 added `POST /api-keys` and
+`POST /reporters`, which both mint through the same `ApiKeyIssuer`; the verb stays, because a
+fresh install needs a key before anybody can sign in. A key also carries a scope (read or
+read-write) and an optional expiry as of §3.13, and as of §3.25 a read-write key is what the
+message gateway's ingestion endpoint requires.
 
 ### 3.4 One origin, one published port
 
@@ -187,8 +190,9 @@ the mechanism a script authenticates with. A key minted from here on carries `Ap
 (`Read` or `ReadWrite`, persisted as its name) and an optional `ExpiresAt`. Neither is
 enforced by scope-specific policy yet — `HomonPolicies.AdministratorOrApiKey` (the policy
 plan 002's probe-list read uses) admits a key of either scope equally, because nothing this
-session needs to tell them apart. The distinction exists for the Backups module (008), whose
-report endpoint is the first thing that should refuse a Read key.
+session needs to tell them apart. The distinction exists for a report endpoint that should refuse
+a Read key; that endpoint is plan 021's `POST /messages`, gated on
+`HomonPolicies.ApiKeyWrite` — see §3.25.
 
 Expiry is enforced immediately, the same way revocation already is: the authentication
 handler fails the whole request — never demotes it to anonymous — the moment `ExpiresAt` is
@@ -741,6 +745,131 @@ navigation entry for `/weather` — the brief's two-item nav must stay one row o
 the widget is the way in, as the Pages section is for `/pages/{slug}`; remembering the
 "show more" count in `localStorage` — how far down a table someone has read is a position
 within one visit, not a preference like collapsed sections (§3.22) or section order (§3.23).
+
+### 3.25 A reporter pushes, Homon ingests, and the monitor is a probe kind
+
+Homon can watch things that answer when asked. It could not watch anything that only speaks when
+it has something to say — a nightly restic run, a NAS array check, any script that knows its own
+outcome. Plan 021 adds the ingestion point: `POST /api/v1/messages`, authenticated with an API
+key, carrying what the reporter is called, what it did, the text that proves it, and **when it
+intends to report again**. The pattern's names are worth knowing because the search terms are:
+this is *push monitoring*, and the overdue half is a *dead man's switch*. It is not a message bus
+— nothing here routes, fans out or subscribes.
+
+Two entities, in `Homon.Domain/Messaging/`. A `Reporter` is registered by the administrator, who
+never chooses its `Identifier` (Homon generates sixteen Crockford base32 characters) and never
+sees its key twice. A `Message` is append-only; a correction is a second message. Everything the
+reporter says about itself — name, description, status, category, recurrence — belongs to the
+message, not to the reporter, so Homon needs no editing when a script changes what it calls
+itself.
+
+**The key decides who is reporting.** One `hmn_…` key is bound 1:1 to one reporter
+(`Reporter.ApiKeyId`, unique index, `Restrict`), minted inside the same transaction that creates
+it. An `identifier` in the body is optional and only ever checked for a match, so a stolen key
+cannot file a report as somebody else. *Rejected*: auto-creating a reporter on first report. Plan
+008's reasoning applies unchanged — a typo would spawn a phantom reporter nobody is watching,
+which is worse than a 403.
+
+**Ingestion is the first endpoint gated on an API key's scope.** `HomonPolicies.ApiKeyWrite`
+requires the `homon:key-scope` claim to read `ReadWrite`, which is the consumer §3.13 said would
+arrive with the Backups module. A `Read` key is refused with 403 — it authenticated, it simply may
+not report — and a cookie session is refused too, because a browser must never be tricked into
+filing a report.
+
+**The monitor is a new `ProbeKind.Message`, not a second status model.** A message probe is a
+`Probe` row, so probe groups, display order, pause, the observation history, the uptime ratio, the
+dashboard's sections and its collapsed-section memory, and plan 009's alert transitions when they
+land, all apply with no new machinery. Adding a member to `ProbeKind` needed no migration: §3.17's
+convention stores it as its *name* in a column with no check constraint, so nothing was renumbered.
+
+**`Probe.Host` holds the reporter's identifier.** A ping probe's host is the thing it listens to;
+a message probe's is too. The API validates on write that it names a reporter that exists, and
+refuses to delete a reporter while a probe names it — the `Restrict` this reference cannot have,
+spelled out as a 400 that names the probe. *Rejected*: a nullable `Probe.ReporterId` with a real
+foreign key, because §3.17 already rejected per-kind scalar columns on `Probe`; an owned
+`MessageOptions` jsonb like `HttpProbeOptions`, because a message probe has no options at all —
+the schedule is the reporter's and the tolerance is the reporter's.
+
+**The scheduler polls it like everything else.** `MessageProbeRunner` performs no I/O beyond
+reading the newest message. That a push probe is *polled* is the point rather than an oddity:
+nothing arriving must be able to change a probe's state, and only a tick can notice that nothing
+arrived. A dead man's switch needs a clock, not a webhook.
+
+**`ProbeResult` gained an optional derived status, because the state machine cannot express
+"late".** `ProbeStateMachine` is binary and right for a probe that flaps; a message probe's
+authority is the reporter's own verdict, and a single `warning` message re-read on every tick would
+otherwise accumulate a failure streak into `Down`. So a runner may supply the status directly and
+the streak machine's answer is overridden; the counters still advance underneath it, so `Unpause`
+and `ChangeFailureThreshold` have something to read, and for a message probe that re-derived
+status is a placeholder the next poll corrects within one tick. **A derived `Unknown` means no
+verdict at all** — no message has ever arrived, or the reporter said it cannot tell — and the
+scheduler writes no `ProbeObservation` for it, because recording a failure there would drag a
+never-reported reporter's uptime to 0.00% when §3.16 promises an em dash. *Rejected*: making
+`ProbeResult.Succeeded` nullable with a separate "no judgement" path, which costs the same three
+files but forces every future runner to answer a question only this kind has, and cannot express
+the `Warning` row at all.
+
+The derivation is one pure function over `(MessageSnapshot?, now)`, which is also the seam plan
+009 reads. Overdue is checked first and beats the reported status, because a success from three
+days ago is not evidence about today. `warning` reads `Unstable`; `none` — checked in, claiming
+nothing — reads `Up` with the word "Reported", and counts as a success for uptime, because
+checking in on time is the only claim a heartbeat makes.
+
+### 3.26 The recurrence is the reporter's own promise, in one of two spellings
+
+A reporter says when to expect the next message, either as an ISO 8601 duration (`PT25H`, `P1D`,
+`P5Y`) or as an absolute instant. Never both — that is a 400. Homon stores one absolute
+`NextExpectedAt`, computed from arrival, plus the raw declaration for the administrator to read
+back.
+
+Durations go through `System.Xml.XmlConvert.ToTimeSpan`, the framework's own parser, so Homon
+ships no duration grammar of its own. The trade is its fixed-length rule: **a month is 30 days and
+a year is 365**, exactly, so `P1M` is thirty days and not "the first of next month". That sentence
+appears in the failure message and in `docs/message-reporting.md`, because it is the one surprise,
+and a reporter that needs a real calendar sends the instant instead.
+
+**There is no server-side grace period.** The reporter owns its own tolerance by declaring a
+window wider than its period — "within 25 hours" for a nightly backup, which is exactly how the
+requirement was phrased. *Rejected*: plan 008's `Grace` field, which would have Homon guessing a
+number the reporter already knows.
+
+**A reporter that declares nothing can never be overdue** — only its own `failure` or `warning`
+can take it off green. That is a real foot-gun, so the administrator's page says so on the row
+rather than leaving the cell blank: a reporter that silently forgot the field otherwise looks
+monitored when it is not.
+
+### 3.27 A message body is administrator-only unless its reporter says otherwise, and the newest one is never swept
+
+A body is whatever a script piped into it. A restic log carries repository paths, hostnames and
+snapshot ids — detail the phone-glancing reader §3.1 admits anonymously has no business seeing —
+so `Reporter.BodyVisibility` defaults to `Administrator`, and `GET /reporters/{id}/messages` is
+the only route in the application that returns a body in full. The administrator opts a reporter
+in to `Reader` deliberately, one at a time, and even then only its *latest* body travels on
+`GET /status`, capped at 2000 characters: that payload is polled every thirty seconds, and a
+64 KiB command output on that interval is not a thing to put on a kitchen-counter dashboard.
+
+The reader-facing `detail` line therefore carries status and timing words only — never the
+reporter's name, description or body — and that is structural rather than a promise: the evaluator
+is handed a `MessageSnapshot` which has no free text in it to leak.
+
+A body over 64 KiB is **truncated, never rejected** (plan 008's decision, carried): a truncated
+proof-of-run beats a failed report at 02:00, the tail is the half worth keeping because that is
+where a shell command puts its summary and its errors, and Kestrel's 30 MB request limit stays the
+real backstop. Truncation is measured in UTF-8 bytes and cuts on a character boundary, and the
+marker it prepends is how a read knows it happened — there is no second column to disagree with
+the text.
+
+Messages are kept 32 days, swept hourly by a hosted service in the shape
+`ProbeObservationRetentionService` already set (a kill switch, an options-bound window, a directly
+callable sweep for the tests). Thirty-two rather than Monitoring's thirty: a calendar month plus
+slack, so a monthly reporter's previous message outlives a 31-day month.
+
+**The sweep never deletes a reporter's most recent message, however old it is.** This is
+correctness, not tidiness. A reporter silent for 33 days is the one case the whole module exists
+for, and deleting its last message would take `NextExpectedAt` with it — flipping the probe from a
+loud red "overdue by 33 days" to a reassuring grey "no report received yet", exactly 32 days after
+the thing died. *Rejected*: plan 008's prune-on-insert, which never runs at all for a reporter that
+has stopped reporting.
 
 ## 4. Things this record does not yet decide
 

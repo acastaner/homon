@@ -12,11 +12,12 @@ index, the order, and the constraints found while scaffolding so nobody rediscov
 | 005 | Monitoring — SNMP (scaffold) | `Domain/Monitoring/` | Community/version + OID; shape only in the first phase |
 | 006 | Links | `Domain/Links/` | URL, title, description, order; admin CRUD; new tab always |
 | 007 | Pages | `Domain/Pages/` | Slug, title, sanitised HTML body; WYSIWYG editor; `/pages/{slug}` |
-| 008 | Backups + API-key admin | `Domain/Backups/` | Report endpoint for scripts (API key), job lateness, admin key management |
+| ~~008~~ | ~~Backups + API-key admin~~ | — | Superseded by 021: the generic gateway does this, with a backup as `category: backup` |
 | 009 | Alerts | cross-cutting | Email on unstable/down via `IAlertEmailSender`, recipients from `Email:AlertRecipients` |
 | 010 | Weather | `Domain/Weather/` | One location, cached provider answer |
 | 011 | Calendar | `Domain/Calendar/` | Several ICS sources merged, colour per source |
 | 012 | Design pass | `src/Homon.Web/` | Tokens, components, dark mode — from `docs/design-brief.md` |
+| 021 | Message gateway + API-key admin | `Domain/Messaging/` | Push-report ingestion (API key), reporters, the `message` probe kind, 32-day retention, admin key management — supersedes 008 |
 
 ## Requirements, verbatim from the brief
 
@@ -36,6 +37,10 @@ this phase; with no status configured only a 2xx response counts as success. See
 
 **Backups.** Scripts on the servers (restic) must report success; an API endpoint the bash
 scripts write their logs to, authenticated with API keys.
+*(Built generically: plan 021 — any script reports to `POST /api/v1/messages` with its own key,
+Homon derives a status and surfaces it as a `message` probe, and a backup is simply
+`category: backup`. Homon holds no restic-specific logic. See `docs/ARCHITECTURE.md` §3.25–§3.27
+and `docs/message-reporting.md`.)*
 
 **Dashboard.** Very simple and very clear. One card per service with a green/yellow/red dot
 and the uptime overlaid as text with two decimals (`98.32%`). Reactive; works on mobile.

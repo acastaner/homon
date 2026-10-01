@@ -1,21 +1,24 @@
-# Backups — module slot
+# Backups — module slot, retired
 
-Not implemented yet. Plan 008.
+**Superseded by the Messaging module (plan 021), 2026-10-01.** Nothing compiles from this folder
+and nothing will; it is kept so that a reader following a reference to it lands here rather than
+nowhere.
 
-**What it owns.** Proof that the backup jobs ran. A backup script (restic on a server,
-today) finishes and `POST`s a report — job name, started/finished, success or failure, a
-log excerpt — authenticated with an API key. The dashboard shows a card per job: last run,
-outcome, and turns orange/red when a job is late or failed.
+What this slot was for — "proof that the backup jobs ran" — is done, generically. A backup script
+reports to `POST /api/v1/messages` with its own API key, exactly as planned, but Homon no longer
+models a *backup job*: it models a **reporter** that files **messages**, and a backup is one with
+`category: backup`. The same mechanism carries a NAS array check, a certificate expiry sweep or
+anything else a script knows the answer to, with no new code and no migration.
 
-**Requirements.** API keys are minted and revoked by the administrator (the auth plumbing
-for them is already in place: `Homon.Domain/Auth/ApiKey.cs`, `create-api-key`, the
-`ApiKey` authentication scheme). A job is "late" when no report has arrived within its
-expected interval plus a grace period.
+Plan 008's load-bearing decisions survived the generalisation and are carried over by name in plan
+021: the reporter must exist before it can report, bodies are truncated at 64 KiB and never
+rejected, lateness is derived at read time rather than tracked as its own state, and the report
+endpoint is rate-limited per key. What did not survive was the backup-shaped part — `BackupJob`,
+`BackupRun`, `ExpectedInterval` and `Grace` — because the reporter declares its own deadline and
+knows its own tolerance better than Homon can guess them.
 
-**Shape.** `BackupJob` (Id, Name, ExpectedInterval, Grace), `BackupRun` (JobId,
-StartedAt, FinishedAt, Succeeded, Summary, LogExcerpt, ReportedByKeyId).
+Read instead:
 
-**Where the rest lands.** `Homon.Api/Endpoints/BackupEndpoints.cs` (the report endpoint
-requires the `ApiKey` policy), `ApiKeyEndpoints.cs` (admin CRUD),
-`Homon.Web/src/pages/admin-api-keys-page.tsx` (already a placeholder), and a `curl` snippet
-in the docs for the scripts to call.
+- `src/Homon.Domain/Messaging/README.md` — what the module owns.
+- `docs/ARCHITECTURE.md` §3.25–§3.27 — the decisions and what was rejected.
+- `docs/message-reporting.md` — what to put in a script.
