@@ -40,6 +40,12 @@ public sealed class Probe
     /// A bare hostname or IP for every kind this plan or 003–005 add. HTTP's own path and
     /// scheme live in 003's <c>HttpProbeOptions</c>, not this field.
     /// </summary>
+    /// <remarks>
+    /// For <see cref="ProbeKind.Message"/> this is the identifier of the reporter the probe
+    /// watches — the thing it listens to, exactly as a ping probe's host is the thing it pings
+    /// (plan 021, Decision 3). The API validates on write that a reporter by that identifier
+    /// exists, and refuses to delete a reporter while a probe names it.
+    /// </remarks>
     public string Host { get; set; } = string.Empty;
 
     /// <summary>Immutable after creation — 003–005 attach kind-specific options a kind change would orphan.</summary>
@@ -91,14 +97,33 @@ public sealed class Probe
     /// stamps the live-state fields. The caller is responsible for also appending a
     /// <see cref="ProbeObservation"/> row — this method only updates the probe's own state.
     /// </summary>
-    public void RecordObservation(bool succeeded, double? latencyMs, string? detail, DateTimeOffset observedAt)
+    /// <param name="succeeded">Whether this poll reached the thing it was checking.</param>
+    /// <param name="latencyMs">The round trip, where the kind measures one; null otherwise.</param>
+    /// <param name="detail">A short, reader-facing line about this outcome.</param>
+    /// <param name="observedAt">When the poll ran, from the scheduler's <c>TimeProvider</c>.</param>
+    /// <param name="derivedStatus">
+    /// Supplied only by a kind whose state is a derivation rather than a streak — a
+    /// <see cref="ProbeKind.Message"/> probe, whose authority is the reporter's own verdict, so
+    /// one "warning" report must stay <see cref="ProbeStatus.Unstable"/> instead of
+    /// accumulating into <see cref="ProbeStatus.Down"/> as the same message is re-read on every
+    /// tick (plan 021, Decision 5). The streak counters still advance underneath it, so
+    /// <see cref="Unpause"/> and <see cref="ChangeFailureThreshold"/> have something to read;
+    /// for such a probe that re-derived status is a placeholder the next poll corrects within
+    /// one scheduler tick. Null for every polled kind, which keeps the state machine's answer.
+    /// </param>
+    public void RecordObservation(
+        bool succeeded,
+        double? latencyMs,
+        string? detail,
+        DateTimeOffset observedAt,
+        ProbeStatus? derivedStatus = null)
     {
         var (successes, failures, status) = ProbeStateMachine.Apply(
             ConsecutiveSuccessCount, ConsecutiveFailureCount, FailureThreshold, succeeded);
 
         ConsecutiveSuccessCount = successes;
         ConsecutiveFailureCount = failures;
-        Status = status;
+        Status = derivedStatus ?? status;
         LastObservedAt = observedAt;
         LastLatencyMs = latencyMs;
         LastDetail = detail;

@@ -132,15 +132,25 @@ public sealed partial class ProbeScheduler(
 
         // This is where plan 009's IProbeTransitionPublisher will read probe.Status before
         // and after RecordObservation, right before the save.
-        probe.RecordObservation(result.Succeeded, result.LatencyMs, result.Detail, observedAt);
-        database.ProbeObservations.Add(new ProbeObservation
+        probe.RecordObservation(result.Succeeded, result.LatencyMs, result.Detail, observedAt, result.DerivedStatus);
+
+        // A derived Unknown is a runner saying "no verdict" — a message probe whose reporter has
+        // never reported, or reported that it cannot tell (plan 021, A1). Recording an
+        // observation for it would give uptime a denominator it has not earned and drag the
+        // figure to 0.00% for a reporter that has simply not spoken yet, when §3.16 says a probe
+        // with no observations reads "—". RecordObservation above still ran, so LastObservedAt
+        // advanced and the due query will not re-dispatch this probe on every tick.
+        if (result.DerivedStatus is not ProbeStatus.Unknown)
         {
-            ProbeId = probe.Id,
-            ObservedAt = observedAt,
-            Succeeded = result.Succeeded,
-            LatencyMs = result.LatencyMs,
-            Detail = result.Detail,
-        });
+            database.ProbeObservations.Add(new ProbeObservation
+            {
+                ProbeId = probe.Id,
+                ObservedAt = observedAt,
+                Succeeded = result.Succeeded,
+                LatencyMs = result.LatencyMs,
+                Detail = result.Detail,
+            });
+        }
 
         await database.SaveChangesAsync(cancellationToken);
     }
