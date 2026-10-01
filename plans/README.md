@@ -4,6 +4,22 @@ Numbered in one monotonic sequence; a number is never reused. Each plan is a fil
 `NNN-short-imperative-title.md` and records what it changed and what it decided; the
 decisions themselves live in `docs/ARCHITECTURE.md`.
 
+**019 is merged.** `main` carries it as `85b2420`, fast-forwarded from `1ce816e` on 2026-10-01 on
+the maintainer's word. The full gate was re-run on the branch immediately before the merge:
+`PASS — web api e2e`, web 133 tests (93 before, +40), api 287 passed with 0 skips, e2e 87 (75
+before, +6 new tests × 2 viewport projects), `oxlint` silent. Nothing under `src/Homon.Api/`,
+`src/Homon.Domain/`, `src/Homon.Infrastructure/` or `tests/Homon.Api.Tests/` changed, and the five
+specs 019 had to leave alone — `dashboard-groups`, `layout`, `refresh`, `contrast`,
+`dashboard-collapse`, plus `helpers.ts` and `collapsed-sections.ts` — are byte-identical to the
+commit before it. Unlike 018, it was executed in this checkout on `plan/019-arrange-dashboard-sections`,
+which is the rule 018 produced.
+
+019 departs from a maintenance note 018 wrote for exactly this case: it adds a second
+`localStorage` key rather than widening 018's array into an object under the one key. The reason is
+in its D3 and in `docs/ARCHITECTURE.md` §3.23 — one key would give two preferences one lifetime and
+falsify the "expanding again removes the key" assertion. Anyone adding a *fourth* dashboard
+preference should read §3.23 before reaching for a fourth key.
+
 **018 is merged.** `main` carries it as `ead406e`, fast-forwarded from `9d70023` on
 2026-09-21. Before the merge the reviewer re-ran all three suites on the branch independently
 rather than trusting the executor's report: `web` → `PASS`, 93 tests (76 before, +17 new);
@@ -58,7 +74,7 @@ reviews and merges the work.
 | 016 | DONE (2026-09-18, `a8503ae`) | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 | 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
-| 019 | awaiting review (2026-09-24, branch `plan/019-arrange-dashboard-sections`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
+| 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
