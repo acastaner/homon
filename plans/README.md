@@ -12,7 +12,11 @@ before, +6 new tests × 2 viewport projects), `oxlint` silent. Nothing under `sr
 specs 019 had to leave alone — `dashboard-groups`, `layout`, `refresh`, `contrast`,
 `dashboard-collapse`, plus `helpers.ts` and `collapsed-sections.ts` — are byte-identical to the
 commit before it. Unlike 018, it was executed in this checkout on `plan/019-arrange-dashboard-sections`,
-which is the rule 018 produced.
+which is the rule 018 produced — and the maintainer manually validated it in a browser on
+2026-10-01, on that branch in this checkout, before it was merged. That last clause is the whole
+point of the rule: the gate can prove the headings are in the right order and the buttons clear
+40px, and it cannot tell you whether the header row carrying `Dashboard` + `Arrange` +
+`Reset order` beside the stat strip looks right.
 
 019 departs from a maintenance note 018 wrote for exactly this case: it adds a second
 `localStorage` key rather than widening 018's array into an object under the one key. The reason is
