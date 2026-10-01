@@ -177,13 +177,25 @@ public class WeatherCacheTests
         Units = WeatherUnits.Metric,
     };
 
+    /// <summary>
+    /// The fixture the nine facts above share. Its shape — not their assertions — moved with
+    /// plan 020, which widened <see cref="WeatherForecast"/>; what this file tests is the
+    /// cache's freshness, staleness, single-flight and generation behaviour, none of which
+    /// reads a field of the forecast it is holding.
+    /// </summary>
     private static WeatherForecast SampleForecast() => new(
         new WeatherCurrent(18, 17, 12, WeatherCondition.Clear, IsDay: true),
         [
-            new WeatherForecastDay(new DateOnly(2026, 1, 2), WeatherCondition.PartlyCloudy, 19, 11),
-            new WeatherForecastDay(new DateOnly(2026, 1, 3), WeatherCondition.Clear, 21, 12),
-            new WeatherForecastDay(new DateOnly(2026, 1, 4), WeatherCondition.Rain, 16, 9),
-        ]);
+            Day(new DateOnly(2026, 1, 1), WeatherCondition.Clear, 20, 12),
+            Day(new DateOnly(2026, 1, 2), WeatherCondition.PartlyCloudy, 19, 11),
+            Day(new DateOnly(2026, 1, 3), WeatherCondition.Clear, 21, 12),
+            Day(new DateOnly(2026, 1, 4), WeatherCondition.Rain, 16, 9),
+        ],
+        [],
+        UtcOffsetSeconds: 0);
+
+    private static WeatherDay Day(DateOnly date, WeatherCondition condition, double high, double low) =>
+        new(date, condition, high, low, 0, 0, 18, 30, "07:10", "18:53");
 
     /// <summary>Scripts one response (or throws) per call, counting invocations.</summary>
     private sealed class StubWeatherProvider : IWeatherProvider

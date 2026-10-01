@@ -1,3 +1,4 @@
+using System.Globalization;
 using Homon.Api.Authentication;
 using Homon.Domain.Weather;
 using Homon.Infrastructure.Persistence;
@@ -48,8 +49,21 @@ internal static class WeatherEndpoints
         return group;
     }
 
+    /// <summary>How many hourly rows cross the wire — the weather page's table ceiling.</summary>
+    private const int WireHours = 24;
+
+    /// <summary>
+    /// How many hourly rows the advisory evaluator reads. Wider than <see cref="WireHours"/>
+    /// on purpose: a gale tomorrow afternoon is worth a banner today even though the table
+    /// does not reach that far.
+    /// </summary>
+    private const int AdvisoryHours = 48;
+
     private static async Task<IResult> GetWeatherAsync(
-        HomonDbContext database, WeatherCache cache, CancellationToken cancellationToken)
+        HomonDbContext database,
+        WeatherCache cache,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
     {
         var settings = await database.WeatherSettings.FindAsync(
             [WeatherSettings.SingletonId], cancellationToken);
@@ -63,8 +77,10 @@ internal static class WeatherEndpoints
 
         var result = await cache.GetAsync(settings, cancellationToken);
 
-        if (!result.IsAvailable)
+        if (!result.IsAvailable || result.Forecast!.Days.Count == 0)
         {
+            // A forecast with no days is as useless as no forecast: the page summarises today
+            // and the widget shows its extremes, so indexing Days[0] would be the alternative.
             return TypedResults.Problem(
                 title: "Weather unavailable",
                 detail: "The forecast could not be refreshed and no recent answer is available.",
@@ -72,15 +88,47 @@ internal static class WeatherEndpoints
         }
 
         var forecast = result.Forecast!;
+        var window = HourlyWindow(forecast, timeProvider, AdvisoryHours);
+
+        // The days the window actually covers — the evaluator must not warn about Saturday
+        // from a Thursday window, or the banner would outlive the reason to care.
+        var windowDates = window.Select(hour => hour.Date).ToHashSet();
+        var warnings = WeatherWarningEvaluator.Evaluate(
+            forecast.Days.Where(day => windowDates.Contains(day.Date)).ToArray(), window, settings.Units);
 
         return TypedResults.Ok(new WeatherResponse(
             settings.Place,
             settings.Units,
             ToCurrentResponse(forecast.Current),
-            forecast.Days.Select(ToForecastDayResponse).ToArray(),
+            ToDayResponse(forecast.Days[0]),
+            forecast.Days.Skip(1).Select(ToDayResponse).ToArray(),
+            window.Take(WireHours).Select(ToHourResponse).ToArray(),
+            warnings.Select(ToWarningResponse).ToArray(),
             result.FetchedAt!.Value,
             result.Stale));
     }
+
+    /// <summary>
+    /// The next <paramref name="count"/> hourly rows at the location, from the hour it is there
+    /// now.
+    /// </summary>
+    /// <remarks>
+    /// Computed per request rather than per fetch. <c>WeatherCache.FreshFor</c> is 15 minutes,
+    /// so a window chosen when the snapshot was built would open on an hour already past for
+    /// most of a snapshot's life. See plan 020, D6.
+    /// </remarks>
+    private static WeatherHour[] HourlyWindow(
+        WeatherForecast forecast, TimeProvider timeProvider, int count)
+    {
+        var localNow = timeProvider.GetUtcNow().UtcDateTime.AddSeconds(forecast.UtcOffsetSeconds);
+        var fromHour = new DateTime(
+            localNow.Year, localNow.Month, localNow.Day, localNow.Hour, 0, 0, DateTimeKind.Unspecified);
+
+        return [.. forecast.Hours.Where(hour => HourStamp(hour) >= fromHour).Take(count)];
+    }
+
+    private static DateTime HourStamp(WeatherHour hour) =>
+        hour.Date.ToDateTime(TimeOnly.ParseExact(hour.Time, "HH:mm", CultureInfo.InvariantCulture));
 
     private static async Task<IResult> GetWeatherSettingsAsync(
         HomonDbContext database, CancellationToken cancellationToken)
@@ -221,8 +269,18 @@ internal static class WeatherEndpoints
     private static WeatherCurrentResponse ToCurrentResponse(WeatherCurrent current) =>
         new(current.Temperature, current.ApparentTemperature, current.WindSpeed, current.Condition, current.IsDay);
 
-    private static WeatherForecastDayResponse ToForecastDayResponse(WeatherForecastDay day) =>
-        new(day.Date, day.Condition, day.High, day.Low);
+    private static WeatherDayResponse ToDayResponse(WeatherDay day) =>
+        new(
+            day.Date, day.Condition, day.High, day.Low, day.PrecipitationSum, day.SnowfallSum,
+            day.WindSpeedMax, day.WindGustsMax, day.Sunrise, day.Sunset);
+
+    private static WeatherHourResponse ToHourResponse(WeatherHour hour) =>
+        new(
+            hour.Date, hour.Time, hour.Condition, hour.Temperature, hour.ApparentTemperature,
+            hour.WindSpeed, hour.WindGusts, hour.PrecipitationProbability);
+
+    private static WeatherWarningResponse ToWarningResponse(WeatherWarning warning) =>
+        new(warning.Kind, warning.Severity, warning.Value, warning.Date, warning.FromTime, warning.ToTime);
 
     /// <param name="Latitude">Required, -90 to 90.</param>
     /// <param name="Longitude">Required, -180 to 180.</param>
@@ -239,14 +297,24 @@ internal static class WeatherEndpoints
     /// <param name="Place">Optional label shown beside "Weather" on the dashboard.</param>
     /// <param name="Units">The unit system every value below is reported in.</param>
     /// <param name="Current">Conditions right now.</param>
-    /// <param name="Forecast">Up to three upcoming days.</param>
+    /// <param name="Today">Today, including its high and low — which <paramref name="Current"/> cannot give.</param>
+    /// <param name="Forecast">The next seven days, starting tomorrow. The dashboard widget shows the first three.</param>
+    /// <param name="Hourly">Up to 24 hourly rows, from the current hour at the location.</param>
+    /// <param name="Warnings">
+    /// Up to three advisories for the next 48 hours, severest first. <b>Derived by Homon</b>
+    /// from thresholds applied to the forecast — Open-Meteo publishes no warnings endpoint, so
+    /// this is never a relayed official advisory. Empty when nothing trips.
+    /// </param>
     /// <param name="FetchedAt">When this forecast was fetched from the provider.</param>
     /// <param name="Stale">True when this forecast is older than the cache's fresh window because a refresh failed.</param>
     public sealed record WeatherResponse(
         string? Place,
         WeatherUnits Units,
         WeatherCurrentResponse Current,
-        WeatherForecastDayResponse[] Forecast,
+        WeatherDayResponse Today,
+        WeatherDayResponse[] Forecast,
+        WeatherHourResponse[] Hourly,
+        WeatherWarningResponse[] Warnings,
         DateTimeOffset FetchedAt,
         bool Stale);
 
@@ -258,9 +326,61 @@ internal static class WeatherEndpoints
     public sealed record WeatherCurrentResponse(
         double Temperature, double ApparentTemperature, double WindSpeed, WeatherCondition Condition, bool IsDay);
 
-    /// <param name="Date">The forecast day's calendar date, in the location's own timezone.</param>
+    /// <param name="Date">The day's calendar date, in the location's own timezone.</param>
     /// <param name="Condition">The simplified condition word.</param>
-    /// <param name="High">The day's forecast high, in <see cref="WeatherResponse.Units"/>.</param>
-    /// <param name="Low">The day's forecast low, in <see cref="WeatherResponse.Units"/>.</param>
-    public sealed record WeatherForecastDayResponse(DateOnly Date, WeatherCondition Condition, double High, double Low);
+    /// <param name="High">The day's high, in <see cref="WeatherResponse.Units"/>.</param>
+    /// <param name="Low">The day's low, in <see cref="WeatherResponse.Units"/>.</param>
+    /// <param name="PrecipitationSum">Total precipitation — millimetres under metric, inches under imperial — or null when unreported.</param>
+    /// <param name="SnowfallSum">Total snowfall — <b>centimetres</b> under metric, inches under imperial — or null when unreported.</param>
+    /// <param name="WindSpeedMax">The day's peak mean wind speed, or null when unreported.</param>
+    /// <param name="WindGustsMax">The day's peak gust, or null when unreported.</param>
+    /// <param name="Sunrise">Sunrise on the location's own clock, <c>"HH:mm"</c>, or null where the sun does not rise.</param>
+    /// <param name="Sunset">Sunset, same shape and caveat as <paramref name="Sunrise"/>.</param>
+    public sealed record WeatherDayResponse(
+        DateOnly Date,
+        WeatherCondition Condition,
+        double High,
+        double Low,
+        double? PrecipitationSum,
+        double? SnowfallSum,
+        double? WindSpeedMax,
+        double? WindGustsMax,
+        string? Sunrise,
+        string? Sunset);
+
+    /// <param name="Date">The hour's calendar date, in the location's own timezone.</param>
+    /// <param name="Time">
+    /// The hour on the location's own clock, <c>"HH:mm"</c>. A string, not a timestamp: the
+    /// provider already answered in the location's zone, and re-parsing it in the browser
+    /// would re-interpret it in the reader's.
+    /// </param>
+    /// <param name="Condition">The simplified condition word.</param>
+    /// <param name="Temperature">Temperature at the hour, in <see cref="WeatherResponse.Units"/>.</param>
+    /// <param name="ApparentTemperature">"Feels like" temperature, in <see cref="WeatherResponse.Units"/>.</param>
+    /// <param name="WindSpeed">Mean wind speed, in <see cref="WeatherResponse.Units"/>.</param>
+    /// <param name="WindGusts">Peak gust, in <see cref="WeatherResponse.Units"/>, or null when unreported.</param>
+    /// <param name="PrecipitationProbability">Chance of precipitation, 0–100, or null when unreported.</param>
+    public sealed record WeatherHourResponse(
+        DateOnly Date,
+        string Time,
+        WeatherCondition Condition,
+        double Temperature,
+        double ApparentTemperature,
+        double WindSpeed,
+        double? WindGusts,
+        int? PrecipitationProbability);
+
+    /// <param name="Kind">What the advisory is about.</param>
+    /// <param name="Severity"><c>"caution"</c> or <c>"severe"</c>.</param>
+    /// <param name="Value">The figure that tripped the threshold, in <see cref="WeatherResponse.Units"/>, or null for a kind with no figure.</param>
+    /// <param name="Date">The day it applies to, in the location's own timezone.</param>
+    /// <param name="FromTime">Start on the location's clock, <c>"HH:mm"</c>, or null for a whole-day advisory.</param>
+    /// <param name="ToTime">End, same shape and null meaning as <paramref name="FromTime"/>.</param>
+    public sealed record WeatherWarningResponse(
+        WeatherWarningKind Kind,
+        WeatherWarningSeverity Severity,
+        double? Value,
+        DateOnly Date,
+        string? FromTime,
+        string? ToTime);
 }

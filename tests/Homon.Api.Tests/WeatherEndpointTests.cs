@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -46,11 +47,78 @@ public class WeatherEndpointTests(WeatherEndpointTests.ConfiguredFactory factory
         Assert.Equal("metric", body.GetProperty("units").GetString());
         Assert.Equal(18, body.GetProperty("current").GetProperty("temperature").GetDouble());
         Assert.True(body.GetProperty("current").GetProperty("isDay").GetBoolean());
-        Assert.Equal(3, body.GetProperty("forecast").GetArrayLength());
+        Assert.Equal(7, body.GetProperty("forecast").GetArrayLength());
         Assert.False(body.GetProperty("stale").GetBoolean());
 
         // Clean up — this fixture's database clone is shared across the whole class.
         await client.SendAsync(DeleteSettingsRequest());
+    }
+
+    [DatabaseFact]
+    public async Task GET_weather_carries_today_seven_forecast_days_and_a_24_hour_window()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+        await PutLocationAsync(client);
+
+        var body = await (await client.GetAsync("/api/v1/weather")).Content.ReadFromJsonAsync<JsonElement>();
+
+        // Today is its own field: `current` cannot give a high and a low, which is the whole
+        // reason plan 020 stopped the provider dropping daily[0].
+        var today = body.GetProperty("today");
+        Assert.Equal(20, today.GetProperty("high").GetDouble());
+        Assert.Equal(12, today.GetProperty("low").GetDouble());
+        Assert.Equal("07:10", today.GetProperty("sunrise").GetString());
+        Assert.Equal("18:53", today.GetProperty("sunset").GetString());
+
+        // Seven days starting tomorrow; the dashboard widget shows the first three of them.
+        var forecast = body.GetProperty("forecast");
+        Assert.Equal(7, forecast.GetArrayLength());
+        Assert.Equal(
+            DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1),
+            DateOnly.Parse(forecast[0].GetProperty("date").GetString()!, CultureInfo.InvariantCulture));
+
+        // 24 of the 48 scanned hours cross the wire, and the first is the current hour there.
+        var hourly = body.GetProperty("hourly");
+        Assert.Equal(24, hourly.GetArrayLength());
+        Assert.Equal(
+            $"{DateTime.UtcNow.Hour:00}:00",
+            hourly[0].GetProperty("time").GetString());
+
+        await client.SendAsync(DeleteSettingsRequest());
+    }
+
+    [DatabaseFact]
+    public async Task GET_weather_derives_the_advisory_the_fake_provider_plants()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+        await PutLocationAsync(client);
+
+        var body = await (await client.GetAsync("/api/v1/weather")).Content.ReadFromJsonAsync<JsonElement>();
+
+        // FakeWeatherProvider plants one three-hour 94 km/h gust run two hours ahead of now,
+        // and keeps every other figure temperate — so exactly one advisory is correct here.
+        var warnings = body.GetProperty("warnings");
+        Assert.Equal(1, warnings.GetArrayLength());
+
+        var warning = warnings[0];
+        Assert.Equal("wind", warning.GetProperty("kind").GetString());
+        Assert.Equal("severe", warning.GetProperty("severity").GetString());
+        Assert.Equal(94, warning.GetProperty("value").GetDouble());
+        Assert.NotNull(warning.GetProperty("fromTime").GetString());
+        Assert.NotNull(warning.GetProperty("toTime").GetString());
+
+        await client.SendAsync(DeleteSettingsRequest());
+    }
+
+    private static async Task PutLocationAsync(HttpClient client)
+    {
+        var put = await client.PutAsJsonAsync(
+            "/api/v1/weather/settings",
+            new { latitude = 51.5, longitude = -0.12, place = "Test location", units = "metric" });
+
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
     }
 
     [DatabaseTheory]
