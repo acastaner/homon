@@ -663,6 +663,85 @@ bottom. The ungrouped section does not have this problem — it is a literal in 
 alternative, never pruning, is worse: a stale id at the head of the order would survive the cap and
 evict a live one.
 
+### 3.24 Severe-weather banners are derived from thresholds, not relayed from a provider
+
+**Open-Meteo publishes no weather-warnings endpoint.** Confirmed against the live API on
+2026-10-01. The banners at the top of `/weather` are therefore *Homon's own reading* of the
+forecast against a table of thresholds, never a relayed official advisory — the vocabulary is
+deliberately `Caution` and `Severe` rather than "warning", and no copy anywhere names an
+authority. Anyone extending this must not "fix" it by trusting a field that does not exist.
+
+The thresholds live in `Homon.Domain/Weather/WeatherWarningThresholds.cs`, hard-coded and
+unit-aware, with `WeatherWarningEvaluator` applying them:
+
+| Kind | Source | Caution (metric) | Severe (metric) | Caution (imperial) | Severe (imperial) |
+| --- | --- | --- | --- | --- | --- |
+| Wind | hourly gust | 60 km/h | 90 km/h | 38 mph | 56 mph |
+| Thunderstorm | hourly WMO code | 95 | 96 or 99 (hail) | same | same |
+| Snow | daily snowfall | 1 cm | 5 cm | 0.4 in | 2 in |
+| Rain | daily precipitation | 20 mm | 40 mm | 0.8 in | 1.6 in |
+| Heat | daily high | 32 °C | 38 °C | 90 °F | 100 °F |
+| Cold | daily low | −10 °C | −18 °C | 14 °F | 0 °F |
+
+Decisions inside that:
+
+- **Hard-coded, not configurable.** Same trade as §3.19's rejected cache TTL: the module has
+  one setting, and the alternative costs a migration, six admin fields and their validation to
+  let a household retune numbers it sets once. The figures suit a temperate household, and a
+  reader in Arizona will find 32 °C unremarkable — that is the accepted cost, and the clean
+  follow-up is a `Weather:Warnings:*` configuration section, not a database column.
+- **The imperial figures are rounded, not converted.** 90 °F is not 32 °C; it is the round
+  number a Fahrenheit reader recognises as "hot", which is what a threshold is for.
+- **Open-Meteo's own unit asymmetry is preserved.** `snowfall_sum` is centimetres while
+  `precipitation_sum` is millimetres, so the snow thresholds are written in cm. The imperial
+  request sends `precipitation_unit=inch`, which converts both.
+- **At most three banners, one per kind, over the next 48 hours.** A six-hour gale is one
+  banner, not six: runs of consecutive qualifying hours collapse, and a run never spans
+  midnight (a warning carries one date, and "22:00 to 02:00" on the first day reads as a window
+  in the wrong direction). The order is total — severity descending, then earliest start, then
+  `WeatherWarningKind`'s declaration order — because the tests pin it. Surplus advisories are
+  dropped silently; there is no "and 2 more" affordance.
+- **Every variable Open-Meteo may not report is nullable, and a null trips nothing.** It
+  answers `null` per hour or day for a variable a model has no value for, and a `double[]`
+  throws on a null element.
+
+**The window is sliced per request, not per fetch.** `WeatherCache.FreshFor` is 15 minutes
+(§3.19), so a window chosen when the snapshot was built would open on an hour already past for
+most of that snapshot's life. The provider therefore parses and caches *everything* it got —
+eight days, 192 hourly rows, and Open-Meteo's `utc_offset_seconds` — and
+`WeatherEndpoints.GetWeatherAsync` computes "the current hour at the location" from the
+injected `TimeProvider` on every request. 48 hours are scanned for advisories; the 24 the
+table can show cross the wire. `WeatherCache` itself is unchanged.
+
+**Local clock times cross the wire as `"HH:mm"` strings.** Open-Meteo under `timezone=auto`
+already answers in the location's zone; sending those as instants and formatting them in the
+browser would re-read them in the *reader's* zone — the trap `formatForecastDay` documents for
+calendar dates. So `WeatherHourResponse.Time`, `Sunrise` and `Sunset` are strings the SPA
+prints verbatim. `utc_offset_seconds` is also why this module needs no tz database: a
+household-wide IANA setting is plan 011's `Calendar:TimeZone` territory, and once that lands
+there will be two notions of the household's zone to reconcile.
+
+**One payload serves both surfaces.** The dashboard widget and `/weather` read the same
+`WEATHER_QUERY_KEY`, so clicking the widget renders the page with no request and no spinner.
+`WeatherResponse.Forecast` therefore grew from three days to seven and the widget slices to
+three. Today is its own field rather than `Forecast[0]`: the provider used to drop `daily[0]`
+because `current` covered it, and `current` cannot give a high and a low.
+
+**The banners are a named list, not `role="alert"` apiece.** They are present on first paint,
+and `role="alert"` is assertive — three of them would be announced over each other. This
+application reserves `role="alert"` for errors and `role="status"` for the session check
+(§3.3). Severity is carried by the word beside the glyph, with the tint as the echo, so it is
+never colour alone. Both tables stay real tables and drop columns under `sm:` rather than
+folding rows into two lines: plan 012 established that re-displaying `<tr>`/`<td>` as blocks
+strips the implicit ARIA row/cell roles the e2e specs query by.
+
+*Rejected*: a second endpoint for the page — one cache, one key, no second round-trip;
+persisting hourly history, for §3.19's reason; admin-tunable thresholds this phase; a banner
+navigation entry for `/weather` — the brief's two-item nav must stay one row on a phone, and
+the widget is the way in, as the Pages section is for `/pages/{slug}`; remembering the
+"show more" count in `localStorage` — how far down a table someone has read is a position
+within one visit, not a preference like collapsed sections (§3.22) or section order (§3.23).
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.

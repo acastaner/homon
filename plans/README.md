@@ -79,6 +79,7 @@ reviews and merges the work.
 | 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
 | 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
+| 020 | IN PROGRESS (branch `plan/020-weather-page`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
@@ -229,5 +230,11 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   Deliberate (it prevents a mail storm on every restart); revisit if that gap matters.
 - **Verify at execution** (flagged inside the plans): SMBLibrary 1.5.8's authentication
   method signature (004), SharpSnmpLib 12.5.7's GET call shape and net10.0 compatibility
-  (005), Open-Meteo's exact attribution wording (010), TipTap under the report-only CSP
-  in a real browser (007).
+  (005), TipTap under the report-only CSP in a real browser (007).
+- **Open-Meteo, confirmed 2026-10-01** (plan 020, Step 0), so no longer a verify-at-execution
+  item: `utc_offset_seconds` is a top-level integer; the `hourly` block is anchored at today
+  00:00 *local*, 24 rows per forecast day; `daily` carries `forecast_days` entries with today
+  first; `sunrise`/`sunset` are local zone-less ISO stamps; `snowfall_sum` is **centimetres**
+  while `precipitation_sum` is millimetres; and `precipitation_unit=inch` converts both. The
+  attribution wording the dashboard shipped ("Weather data by Open-Meteo.com", linking
+  <https://open-meteo.com/>) was left as plan 010 wrote it.

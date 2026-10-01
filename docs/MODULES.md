@@ -105,7 +105,11 @@ monitoring existed.
 is rendered verbatim) — an allow-list HTML sanitiser in `Homon.Infrastructure/Pages/`.
 
 **Weather.** Candidate: Open-Meteo, which needs no API key — a self-hoster should not have to
-register anywhere to see the weather. Cache the answer server-side.
+register anywhere to see the weather. Cache the answer server-side. *(Plan 020 extended the
+module: today's high and low in the widget, a full `/weather` page behind it with an
+hour-by-hour table, a seven-day table, and severe-weather banners. Open-Meteo publishes no
+warnings endpoint, so those banners are derived from a hard-coded threshold table rather than
+relayed — see `docs/ARCHITECTURE.md` §3.24.)*
 
 **Calendar.** ICS URLs first (public or private links from Google/Apple/Nextcloud); CalDAV
 later. Credentials, when needed, are encrypted like probe secrets.

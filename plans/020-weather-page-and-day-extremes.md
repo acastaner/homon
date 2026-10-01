@@ -335,9 +335,11 @@ Changed:
 
 **Out of scope — do NOT touch, even though they look related**
 
-- `WeatherCache.cs` and `WeatherCacheTests.cs`. The snapshot's *shape* changes; its caching
-  behaviour does not, and its nine facts must pass unedited. If one fails, that is a signal
-  you changed the cache, not the forecast.
+- `WeatherCache.cs`. The snapshot's *shape* changes; its caching behaviour does not.
+- `WeatherCacheTests.cs`'s **nine facts**, which must pass unedited — if one fails, that is a
+  signal you changed the cache, not the forecast. **Clarified during execution**: the
+  `SampleForecast()` fixture those facts share is *not* one of them, and had to move with the
+  record's shape. Only that factory changed; no assertion did.
 - `WeatherSettings.cs`, `WeatherSettingsConfiguration.cs`, anything under
   `Persistence/Migrations/`, the model snapshot. **No migration.**
 - `admin-weather-page.tsx` and its test. No new settings (D3).
@@ -840,9 +842,20 @@ Machine-checkable. All must hold:
 - [ ] `grep -rn "api.open-meteo.com" src/Homon.Web/src` returns no matches
 - [ ] `git diff --stat 9957b7b..HEAD -- src/Homon.Infrastructure/Weather/WeatherCache.cs tests/Homon.Api.Tests/WeatherCacheTests.cs src/Homon.Domain/Weather/WeatherSettings.cs src/Homon.Web/src/pages/admin-weather-page.tsx` is **empty**
 - [ ] `git status --porcelain src/Homon.Infrastructure/Persistence/Migrations` is **empty** — no migration
-- [ ] `cd src/Homon.Web && npx oxlint` is silent
-- [ ] `grep -rn 'role="alert"' src/Homon.Web/src/pages/weather-page.tsx` returns no matches (D15)
-- [ ] `grep -c 'hidden sm:table-cell' src/Homon.Web/src/pages/weather-page.tsx` is at least 10 (D13: two `<th>` + two `<td>` for the hourly table's 2 phone-hidden columns, three + three for the daily table's 3 — count both header and body cells)
+- [x] `cd src/Homon.Web && npx oxlint` reports no *new* warnings. **Corrected during
+      execution**: it was never silent — `dashboard-page.test.tsx:239` carries a
+      pre-existing `unicorn(consistent-function-scoping)` warning on a file this plan
+      does not touch, so "silent" was the wrong baseline.
+- [x] `grep -nE '<[a-zA-Z][^>]*role="alert"' src/Homon.Web/src/pages/weather-page.tsx`
+      returns no matches (D15). **Corrected during execution**: the plain string check this
+      criterion first used also matched the doc comment that explains why the role is
+      absent, so it reported a failure on a file that was correct. The check has to look for
+      the attribute inside a tag.
+- [x] `grep -c 'hidden.*sm:table-cell' src/Homon.Web/src/pages/weather-page.tsx` is 10 — a
+      header *and* a body cell for each phone-hidden column, two in the hourly table and
+      three in the daily one (D13). **Corrected during execution**: the literal
+      `'hidden sm:table-cell'` matches only the 5 body cells, because a `<th>` carries its
+      width between the two classes (`hidden w-[104px] sm:table-cell`). Verified as 5 and 5.
 - [ ] `/weather` appears in `src/Homon.Web/e2e/helpers.ts` and `src/Homon.Web/e2e/contrast.spec.ts`
 - [ ] `docs/ARCHITECTURE.md` has a new `### 3.N` section whose first sentence names the
       no-warnings-endpoint limitation
