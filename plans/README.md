@@ -4,6 +4,35 @@ Numbered in one monotonic sequence; a number is never reused. Each plan is a fil
 `NNN-short-imperative-title.md` and records what it changed and what it decided; the
 decisions themselves live in `docs/ARCHITECTURE.md`.
 
+**020 is merged.** `main` carries its nine commits, `b045d8f`…`ca2a89b`, fast-forwarded from
+`9957b7b` on 2026-10-01 on the maintainer's word, and released as `v0.2.0` — the first release
+since `v0.1.2`, so that tag covers 019 as well. The suites were re-run on the branch immediately
+before the merge, **one at a time**: `web` → 23 files / 150 tests (148 before the last fix, 133
+before 020), `api` → 346 passed with 0 skips (287 before), `e2e` → 107 at both viewport projects
+(87 before). Exit codes were checked rather than banners — piping the gate into `tail` reports
+*tail's* exit code, which briefly made a failed run look clean.
+
+**The combined `./ci/run-ci.sh` could not be used.** It aborts on this machine partway through
+`dotnet test` with `Internal CLR error. (0x80131506)` (exit 134) — the environmental abort already
+on record for this checkout. Suite-by-suite is the reliable form here, and the done criteria in
+`plans/020-weather-page-and-day-extremes.md` were rewritten to say so.
+
+The maintainer manually validated it in a browser on 2026-10-01, on
+`plan/020-weather-page` in this checkout, before the merge. That mattered more than usual here:
+every suite was green while the hourly table showed a gusty hour's **mean** wind, `12 km/h`, in
+red beneath a banner reading "gusts to 94 km/h". Nothing was wrong with the tint or the banner —
+the row's severity was correct and the tests asserted exactly that. The defect was that the cell
+carrying the colour held the one number that could not justify it. Each cell now takes its colour
+only from an advisory about its own figure, and the wind cell shows the gust. The lesson is worth
+keeping: *a test that asserts a tint is present does not ask whether the tint points at the right
+number.*
+
+020 is also the first plan whose own done criteria were wrong and had to be corrected in place
+during execution — three of them, each recorded in the plan with what the real check is: `oxlint`
+was never silent on this tree (a pre-existing warning in an untouched file), the hidden-column
+grep matched only body cells because a `<th>` carries its width between the two classes, and the
+`role="alert"` check matched the doc comment explaining that role's absence.
+
 **019 is merged.** `main` carries it as `85b2420`, fast-forwarded from `1ce816e` on 2026-10-01 on
 the maintainer's word. The full gate was re-run on the branch immediately before the merge:
 `PASS — web api e2e`, web 133 tests (93 before, +40), api 287 passed with 0 skips, e2e 87 (75
@@ -79,7 +108,7 @@ reviews and merges the work.
 | 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
 | 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
-| 020 | AWAITING REVIEW (branch `plan/020-weather-page`, gate green suite-by-suite) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
+| 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
