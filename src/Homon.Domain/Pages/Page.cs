@@ -16,7 +16,7 @@ public sealed class Page
 
     /// <summary>
     /// Cap on the sanitised body, in UTF-16 characters (~200 KB). "A light pages feature" —
-    /// not a document store; see plans/007-pages-and-wysiwyg-editor.md, Decisions.
+    /// not a document store; see plans/archive/007-pages-and-wysiwyg-editor.md, Decisions.
     /// </summary>
     public const int BodyHtmlMaxLength = 200_000;
 

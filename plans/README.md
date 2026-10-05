@@ -4,6 +4,15 @@ Numbered in one monotonic sequence; a number is never reused. Each plan is a fil
 `NNN-short-imperative-title.md` and records what it changed and what it decided; the
 decisions themselves live in `docs/ARCHITECTURE.md`.
 
+**A plan that is finished with moves to `archive/`.** `plans/` holds only what might still be
+executed — the `planned` rows below — so that opening the directory answers "what is outstanding"
+rather than "what has ever been written". A plan is archived once its row reads `DONE` or
+`REJECTED`, under the same filename; the table below is the index to both, and it is the authority
+on status. Archiving is the last step of merging a plan, after its row is updated. Nothing else
+about a plan changes when it moves: paths written *inside* an archived plan are left as they were
+at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
+it a worse one.
+
 **020 is merged.** `main` carries its nine commits, `b045d8f`…`ca2a89b`, fast-forwarded from
 `9957b7b` on 2026-10-01 on the maintainer's word, and released as `v0.2.0` — the first release
 since `v0.1.2`, so that tag covers 019 as well. The suites were re-run on the branch immediately
@@ -15,7 +24,7 @@ before 020), `api` → 346 passed with 0 skips (287 before), `e2e` → 107 at bo
 **The combined `./ci/run-ci.sh` could not be used.** It aborts on this machine partway through
 `dotnet test` with `Internal CLR error. (0x80131506)` (exit 134) — the environmental abort already
 on record for this checkout. Suite-by-suite is the reliable form here, and the done criteria in
-`plans/020-weather-page-and-day-extremes.md` were rewritten to say so.
+`plans/archive/020-weather-page-and-day-extremes.md` were rewritten to say so.
 
 The maintainer manually validated it in a browser on 2026-10-01, on
 `plan/020-weather-page` in this checkout, before the merge. That mattered more than usual here:

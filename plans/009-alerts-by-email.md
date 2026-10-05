@@ -42,9 +42,9 @@
 - **Effort**: L
 - **Risk**: MED — the only `BackgroundService` in the codebase so far, and it hooks a
   scheduler this plan does not fully control the shape of
-- **Depends on**: `plans/002-monitoring-core-groups-and-ping.md`,
-  `plans/008-backup-reports-and-api-key-administration.md` (both must land first);
-  `plans/003-http-probe.md` only for its written-down contract table, not its code
+- **Depends on**: `plans/archive/002-monitoring-core-groups-and-ping.md`,
+  `plans/archive/008-backup-reports-and-api-key-administration.md` (both must land first);
+  `plans/archive/003-http-probe.md` only for its written-down contract table, not its code
 - **Category**: direction
 - **Planned at**: commit `f4e7261`, 2026-09-15
 

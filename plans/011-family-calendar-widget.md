@@ -25,8 +25,8 @@
   RECURRENCE-ID, VTIMEZONE), and a second "the URL itself is the secret" shape for
   `ISecretProtector`. Lower than it would otherwise be: the cache (Decision 5) reuses plan
   010's `WeatherCache` shape rather than inventing a new one.
-- **Depends on**: `plans/003-http-probe.md` (the secret protector — see below). Also reads
-  `plans/010-weather-widget.md`'s cache design (Decision 5) — 010 executes first (numeric
+- **Depends on**: `plans/archive/003-http-probe.md` (the secret protector — see below). Also reads
+  `plans/archive/010-weather-widget.md`'s cache design (Decision 5) — 010 executes first (numeric
   order) and is the precedent, not a hard blocking dependency: if 010 has not landed, build
   `CalendarCache` from Decision 5's description directly instead of reading `WeatherCache.cs`.
 - **Category**: direction · **Planned at**: commit `f4e7261`, 2026-09-15
@@ -266,7 +266,7 @@ after adding a source).
   `AddCalendar` here, shaped like `AddHomonEmail` (lines 68-111).
 - `src/Homon.Infrastructure/Email/ResendEmailSender.cs:14-60` and (once 003 lands)
   `HttpProbeRunner.cs` — the outbound-HTTP-with-timeout exemplars this reader follows.
-- `plans/010-weather-widget.md`'s `WeatherCache` (`FreshFor`/`StaleTolerance`/single-flight,
+- `plans/archive/010-weather-widget.md`'s `WeatherCache` (`FreshFor`/`StaleTolerance`/single-flight,
   `services.TryAddSingleton(TimeProvider.System)`) — the exemplar `CalendarCache` copies
   (Decision 5). Once 010 lands, read the real `WeatherCache.cs`/`Homon.Infrastructure/Weather/`
   and reuse its `TimeProvider.System` registration rather than adding a second one.

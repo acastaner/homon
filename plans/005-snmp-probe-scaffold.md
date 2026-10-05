@@ -7,7 +7,7 @@
 >
 > **First step**: confirm plan 002 landed with the shape in "Contract assumed", and that
 > plan 003's `ISecretProtector`, owned-jsonb pattern and write-only secret wire semantics
-> landed as `plans/003-http-probe.md` describes — this plan reuses all three by name and does
+> landed as `plans/archive/003-http-probe.md` describes — this plan reuses all three by name and does
 > not redefine them. **STOP if either is missing.**
 >
 > **Drift check (run first)**:
@@ -23,8 +23,8 @@
 - **Effort**: S
 - **Risk**: LOW — smallest monitoring plan; one outbound UDP call behind a seam, no new
   secret or persistence pattern
-- **Depends on**: `plans/002-monitoring-core-groups-and-ping.md`,
-  `plans/003-http-probe.md` (both must land first)
+- **Depends on**: `plans/archive/002-monitoring-core-groups-and-ping.md`,
+  `plans/archive/003-http-probe.md` (both must land first)
 - **Category**: direction
 - **Planned at**: commit `f4e7261`, 2026-09-15
 

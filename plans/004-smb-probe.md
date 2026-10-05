@@ -22,8 +22,8 @@
 - **Risk**: MED — a fully synchronous third-party library with no cancellation support, a
   new LGPL-3.0 dependency to account for correctly, and a credential shape 003's
   `HttpCredential` does not fit
-- **Depends on**: `plans/002-monitoring-core-groups-and-ping.md`,
-  `plans/003-http-probe.md` (both must land first — this plan reuses their contract and
+- **Depends on**: `plans/archive/002-monitoring-core-groups-and-ping.md`,
+  `plans/archive/003-http-probe.md` (both must land first — this plan reuses their contract and
   patterns by name, not by redesign)
 - **Category**: direction
 - **Planned at**: commit `f4e7261`, 2026-09-15

@@ -7,7 +7,7 @@ namespace Homon.Api.Tests;
 /// against stored XSS (<c>BodyHtml</c> is rendered verbatim by the SPA), so every case here
 /// asserts the exact stripped-or-kept output, not just that
 /// <see cref="IPageHtmlSanitizer.Sanitize"/> returned. See
-/// plans/007-pages-and-wysiwyg-editor.md, Test plan.
+/// plans/archive/007-pages-and-wysiwyg-editor.md, Test plan.
 /// </summary>
 public class PageHtmlSanitizerTests
 {

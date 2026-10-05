@@ -12,7 +12,7 @@ public interface IPageHtmlSanitizer
 /// <summary>
 /// Wraps <see cref="HtmlSanitizer"/> with the exact tag/attribute allow-list the TipTap editor
 /// (admin-page-editor-page.tsx) is configured to produce. If the editor's extension list
-/// changes, this allow-list must change with it — see plans/007-pages-and-wysiwyg-editor.md,
+/// changes, this allow-list must change with it — see plans/archive/007-pages-and-wysiwyg-editor.md,
 /// Maintenance notes.
 /// </summary>
 public sealed class PageHtmlSanitizer : IPageHtmlSanitizer

@@ -104,6 +104,7 @@ src/Homon.Web/             Vite + React + TS; e2e/ is Playwright; nginx.conf pro
 tests/Homon.Api.Tests/     xunit; HomonApiFactory (no DB) and ApiDatabaseFactory (a clone per class)
 ci/                        the gate, the CI Postgres, the docker guard
 docs/  plans/              decisions, roadmap, runbooks; numbered plans
+                           plans/ holds what is outstanding; plans/archive/ what is done
                            docs/message-reporting.md is the contract a reporter implements
 ```
 

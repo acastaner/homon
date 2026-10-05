@@ -75,7 +75,7 @@
 
 /* Type: IBM Plex Sans for words, IBM Plex Mono for numbers/times/schedules/the footer.
    Self-hosted static weight files (no variable Mono package exists on Fontsource) — see
-   plans/012-design-pass.md Decision 2 for why static, not variable, for both faces. Only the
+   plans/archive/012-design-pass.md Decision 2 for why static, not variable, for both faces. Only the
    weights the type ramp uses. */
 @import '@fontsource/ibm-plex-sans/400.css';
 @import '@fontsource/ibm-plex-sans/500.css';

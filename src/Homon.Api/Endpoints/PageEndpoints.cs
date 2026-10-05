@@ -20,7 +20,7 @@ namespace Homon.Api.Endpoints;
 /// (<c>dangerouslySetInnerHTML</c> in <c>page-page.tsx</c>), so every write runs the body
 /// through <see cref="IPageHtmlSanitizer"/> before it reaches the database — the sanitiser,
 /// not the TipTap editor, is the security boundary. See
-/// <c>plans/007-pages-and-wysiwyg-editor.md</c>.
+/// <c>plans/archive/007-pages-and-wysiwyg-editor.md</c>.
 /// </remarks>
 internal static partial class PageEndpoints
 {
