@@ -1,4 +1,4 @@
-# Reporting to Homon from a script
+# Reporting to Homon from a script or an agent
 
 Homon can watch a service by poking it (ping, HTTP). It can also watch something that only speaks
 when it has something to say — a nightly backup, a storage array check, an agent — by letting that
@@ -10,7 +10,18 @@ watches the clock. It knows nothing about restic, exit codes or log formats.
 
 See `docs/ARCHITECTURE.md` §3.25–§3.27 for why it is built this way.
 
+**The machine-readable contract** is at `GET /api/v1/openapi.json`, served anonymously and
+versioned with the API it describes. It is generated from the endpoints themselves, so where it and
+this page disagree, it is right and this page is stale. Fetch it first if you are generating a
+client; read on if you are writing the call by hand.
+
 ## Set one up
+
+This part cannot be automated, by design. Registering a reporter is administrator-only and goes
+through a signed-in browser session — an API key can never administer anything
+(`docs/ARCHITECTURE.md` §3.3), so **a script or an agent cannot provision itself**. If you are an
+agent reading this, the token is something a human has to mint and hand you; ask for one, and ask
+for the identifier with it. Everything after this section you can do on your own.
 
 1. Sign in, go to **Admin → Reporters**, and add one. Give it a name you will recognise on the
    dashboard.
@@ -135,6 +146,72 @@ exit "$code"
 
 Put it behind a systemd timer or cron. One reporter per thing you want a separate row for: a host
 that backs up *and* has an array to watch gets two reporters, two keys and two probes.
+
+## The same thing in Python
+
+No dependencies beyond the standard library, for an agent or a service that is not a shell script.
+The shape to copy is the error handling: **reporting must never be able to fail the work it is
+reporting on**, so every exception from the call is swallowed after being logged, and the status is
+decided before the call is attempted.
+
+```python
+import json
+import logging
+import pathlib
+import urllib.error
+import urllib.request
+
+HOMON = "https://homon.example.invalid"
+KEY_FILE = pathlib.Path("/etc/homon/example-agent.key")
+
+
+def report(name, status, *, body=None, recurrence=None, category="other"):
+    """File one report. Returns the deadline Homon set, or None if it could not be filed."""
+    payload = {"name": name, "status": status, "category": category}
+
+    if body is not None:
+        payload["message"] = body          # never rejected for length; the last 64 KiB is kept
+    if recurrence is not None:
+        payload["recurrence"] = recurrence  # e.g. "PT25H" — see Recurrence below
+
+    request = urllib.request.Request(
+        f"{HOMON}/api/v1/messages",
+        method="POST",
+        data=json.dumps(payload).encode(),
+        headers={
+            # Read at call time from a file with restrictive permissions. Not from an argument and
+            # not from a constant in the source: argv is visible in `ps` to every user on the host,
+            # and a key in a repository is a key that has leaked.
+            "Authorization": f"Bearer {KEY_FILE.read_text().strip()}",
+            "Content-Type": "application/json",  # not optional — it is the CSRF guard
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.load(response)["nextExpectedAt"]
+    except urllib.error.HTTPError as error:
+        # The body of a 400 names the field at fault, so log it rather than only the status.
+        logging.error("Homon refused the report: %s %s", error.code, error.read().decode("utf-8", "replace"))
+    except OSError as error:
+        logging.error("Could not reach Homon: %s", error)
+
+    return None
+
+
+# Whatever this agent actually does, decided before anything is reported.
+try:
+    summary = do_the_work()
+    status, body = "success", summary
+except Exception as error:               # noqa: BLE001 — the reporter's whole job is to say so
+    status, body = "failure", repr(error)
+
+report("example-agent nightly pass", status, body=body, recurrence="PT25H", category="backup")
+```
+
+An agent that runs on no fixed schedule should send **no** `recurrence` at all rather than guessing
+one — see the warning under Recurrence about what that costs — or send `expectNextBy` computed from
+whenever it actually intends to run next.
 
 ## When something is wrong
 

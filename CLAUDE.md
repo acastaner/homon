@@ -40,9 +40,13 @@ or switching back.
 ## Repository state
 
 **Phase 0 — scaffolding — is complete and the gate is green** (`./ci/run-ci.sh` →
-`PASS — web api e2e`). Every module is an empty slot: a `README.md` under
-`src/Homon.Domain/<Module>/` stating what it will own, and nothing compiled. The plumbing
-that exists: PostgreSQL + EF Core migrations (`migrate` verb, never on startup), ASP.NET
+`PASS — web api e2e`). It left every module as an empty slot: a `README.md` under
+`src/Homon.Domain/<Module>/` stating what it will own, and nothing compiled. **Monitoring
+(002/003), Links (006), Pages (007), Weather (010/020) and Messaging (021) have since landed**;
+`Monitoring/` still owns the SMB and SNMP slots (004/005), `Calendar/` is still empty (011), and
+`Backups/` is retired — plan 021 superseded it. `plans/README.md` is the authority on what has
+landed; this paragraph is a summary and will go stale before that table does. The plumbing Phase 0
+itself built: PostgreSQL + EF Core migrations (`migrate` verb, never on startup), ASP.NET
 Identity with a configuration-supplied bootstrap administrator and a cookie session, an
 `ApiKey` authentication scheme (`hmn_…` keys, `create-api-key` verb), a `Reader` policy
 switched by `Auth:RequireSignInForReaders`, an `IAlertEmailSender` seam (Resend or the
@@ -55,12 +59,28 @@ dark by default, per "Design guidelines" in `docs/design-brief.md` and pictured 
 index.css`, the theme toggle and `public/theme-bootstrap.js`, `StatusChip`/`Sparkline` and
 the panel/row/empty-state primitives, applied to every surface a module plan had already
 built by the time it ran (dashboard, admin lists, the Ping/HTTP probe form, the page view
-and editor). Surfaces whose owning module has not landed yet — Backups, Calendar, the
-SMB/SNMP probe fieldsets, the API-key reveal flow — remain unstyled placeholders until
-their own plan runs and reuses these primitives; that is expected, not drift. Semantic
+and editor). Surfaces whose owning module has not landed yet — Calendar, the SMB/SNMP probe
+fieldsets — remain unstyled placeholders until their own plan runs and reuses these primitives;
+that is expected, not drift. (The Backups surfaces and the API-key reveal flow that this
+paragraph used to list are built: plan 021 did both, reusing these primitives as intended.) Semantic
 HTML, landmarks and accessible names are still the contract with the tests — the unit and
 Playwright suites query by role and name, and every `className` this pass added had to
 keep them unchanged.
+
+**The message gateway (plan 021) is how anything outside Homon reports in.** A script, a cron
+job or an agent on another host `POST`s one JSON document to `/api/v1/messages` with its own
+`hmn_…` key; Homon derives a status, and a `message`-kind probe surfaces it on the dashboard like
+any other probe. **If you are implementing a consumer, read `docs/message-reporting.md`** — the
+wire contract, every field, the status and category vocabularies, a bash and a Python example, and
+what each response code means. `GET /api/v1/openapi.json` is the machine-readable version.
+
+Two things to know before touching this module: a reporter is **registered by an administrator
+through the browser**, so a key-authenticated caller can never provision itself (§3.3); and
+`Probe.Host` holds the reporter's identifier for a `message` probe, which is why deleting a
+reporter is refused while a probe names it (§3.25). Plan 021 also made `ProbeResult` carry an
+optional derived status — a runner that supplies `ProbeStatus.Unknown` there means *no verdict*,
+and the scheduler records no observation for it — so **any new `IProbeRunner` has to decide whether
+its kind can reach no verdict**.
 
 ## The gate
 
@@ -84,6 +104,7 @@ src/Homon.Web/             Vite + React + TS; e2e/ is Playwright; nginx.conf pro
 tests/Homon.Api.Tests/     xunit; HomonApiFactory (no DB) and ApiDatabaseFactory (a clone per class)
 ci/                        the gate, the CI Postgres, the docker guard
 docs/  plans/              decisions, roadmap, runbooks; numbered plans
+                           docs/message-reporting.md is the contract a reporter implements
 ```
 
 ## Conventions that bite
