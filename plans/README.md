@@ -107,7 +107,7 @@ reviews and merges the work.
 | 016 | DONE (2026-09-18, `a8503ae`) | S | — (ships with 015) | Make the ICMP sysctl applicable under rootless Docker |
 | 017 | planned | S | — | `deploy.sh` finds the Compose file (`compose.yaml` → `compose.yml` → `compose.prod.yaml`, or `-f`) |
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
-| 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
+| 019 | DONE (2026-10-01, `85b2420`, released `v0.2.0`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
 | 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
 | 021 | DONE (2026-10-05, `f68ce63`, released `v0.3.0`) | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
 
