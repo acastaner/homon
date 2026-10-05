@@ -109,7 +109,7 @@ reviews and merges the work.
 | 018 | DONE (2026-09-21, `ead406e`) | M | — (builds on 002, 006, 007, 010, 012, 014) | Collapsible dashboard sections, remembered per browser in local storage |
 | 019 | DONE (2026-10-01, `85b2420`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
 | 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
-| 021 | IN PROGRESS | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
+| 021 | DONE (2026-10-05, `f68ce63`, released `v0.3.0`) | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
