@@ -610,4 +610,13 @@ describe('DashboardPage', () => {
     expect(sparklineCell('Nextcloud').querySelector('svg')).not.toBeNull()
     expect(sparklineCell('NAS share').querySelector('svg')).toBeNull()
   })
+
+  it("links each probe's name to its own page", async () => {
+    stubFetch(statusWithASharedProbe)
+
+    renderWithProviders(<DashboardPage />)
+
+    const [link] = await screen.findAllByRole('link', { name: 'Shared device' })
+    expect(link).toHaveAttribute('href', '/probes/probe-1')
+  })
 })

@@ -15,6 +15,7 @@ import {
   dashboardSections,
   formatCheckedAt,
   messageChipWord,
+  plotsLatency,
   summariseProbeStates,
   useStatus,
   type DashboardSection,
@@ -188,7 +189,19 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
                 */}
                 <StatusChip state={probe.state} word={messageChipWord(probe)} />
               </td>
-              <td className="px-4 py-3 text-[15px] font-semibold">{probe.name}</td>
+              {/*
+                The name is a link to the probe's own page (plan 023, D9). Its text is exactly the
+                name, so every unit and e2e row/name query is unaffected, and the colour pair is the
+                one Links already uses, so contrast is unaffected too.
+              */}
+              <td className="px-4 py-3 text-[15px] font-semibold">
+                <RouterLink
+                  to={`/probes/${probe.id}`}
+                  className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+                >
+                  {probe.name}
+                </RouterLink>
+              </td>
               <td className={`px-4 py-3 text-[14px] ${detailClassName(probe.state)}`}>
                 {probe.detail ?? ''}
                 {/*
@@ -206,7 +219,7 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
               </td>
               <td className="mono px-4 py-3 text-right text-[14px]">{formatUptime(probe.uptimePercent)}</td>
               <td className="px-4 py-3">
-                {probe.kind === 'ping' || probe.kind === 'http' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
+                {plotsLatency(probe.kind) ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
               </td>
               <td className="px-4 py-3 text-[13px] text-muted">{formatCheckedAt(probe.lastCheckedAt, now)}</td>
             </tr>
