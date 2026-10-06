@@ -25,14 +25,15 @@ describe('formatDuration', () => {
 })
 
 describe('niceCeiling', () => {
-  it('rounds up to 1, 2, 2.5, 5 or 10 times a power of ten', () => {
+  it('rounds up to the next step of 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 or 10 times a power of ten', () => {
     expect(niceCeiling(0)).toBe(1)
-    expect(niceCeiling(7)).toBe(10)
-    expect(niceCeiling(12)).toBe(20)
+    expect(niceCeiling(7)).toBe(8)
+    expect(niceCeiling(12)).toBe(15)
     expect(niceCeiling(23)).toBe(25)
     expect(niceCeiling(41)).toBe(50)
     expect(niceCeiling(100)).toBe(100)
-    expect(niceCeiling(0.3)).toBe(0.5)
+    expect(niceCeiling(286)).toBe(300)
+    expect(niceCeiling(0.3)).toBe(0.3)
   })
 })
 

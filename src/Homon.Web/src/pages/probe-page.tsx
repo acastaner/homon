@@ -161,6 +161,7 @@ export function ProbePage() {
               buckets={history.latency}
               bucketSeconds={history.bucketSeconds}
               rangeLabel={PROBE_RANGE_LABEL[range]}
+              state={history.state}
             />
           </div>
           <p className="mono text-[13px] text-muted">

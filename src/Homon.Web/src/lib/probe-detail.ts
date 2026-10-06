@@ -115,8 +115,10 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * The smallest "nice" number (1, 2, 2.5, 5 or 10 times a power of ten) that is at least `value`,
- * for the chart's y axis; 1 when there is nothing to scale.
+ * The smallest "nice" number (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 or 10 times a power of ten) that is at
+ * least `value`, for the chart's y axis; 1 when there is nothing to scale. The steps are finer than
+ * 1/2/2.5/5 on purpose: with those, 260 ms went up to 500 and half the chart's height was empty.
+ * Rounded, so `3 * 0.1` reads `0.3` and the axis label never prints a long float.
  */
 export function niceCeiling(value: number): number {
   if (value <= 0) {
@@ -124,10 +126,10 @@ export function niceCeiling(value: number): number {
   }
 
   const magnitude = 10 ** Math.floor(Math.log10(value))
-  const step = [1, 2, 2.5, 5, 10].find((candidate) => candidate * magnitude >= value)
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((candidate) => candidate * magnitude >= value)
 
   // `10 * magnitude >= value` always holds, so `find` cannot miss; the fallback is for the type.
-  return (step ?? 10) * magnitude
+  return Number(((step ?? 10) * magnitude).toPrecision(12))
 }
 
 /** The reader's own locale and time zone, so tests must not assert its exact text. */

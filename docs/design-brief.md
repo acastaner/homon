@@ -267,12 +267,20 @@ position in each of the sections it appears in.
 table, 60 × 18px inline after the detail on phone. 2px `muted` stroke, rounded joins, and
 a 2.5px dot on the latest point in the row's status colour. No axis, no fill.
 
-**Latency chart.** The probe page's large chart (plan 023), not a bigger sparkline: the y axis
-starts at 0 and ends at a "nice" ceiling, because it answers "how slow, in ms" rather than showing
-shape. A 2px `muted` line, broken at buckets with no data; a bar along the bottom of any bucket with
-failed polls, `down` when every poll failed and `unstable` when only some did. Axis labels are HTML in
-mono 12px `muted`, and there is no text inside the SVG, which stretches to the panel and would
-distort it.
+**Latency chart.** The probe page's large chart (plan 023, D8'), not a bigger sparkline. It is drawn
+in real pixels at its measured width by 224px, never a viewBox stretched to the panel, which is what
+lets it carry circles and text. The y axis starts at 0 and ends at a "nice" ceiling over the highest
+mean plus 10% (steps 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10), because it answers "how slow, in ms" rather
+than showing shape; gridlines at 0, half and the ceiling, labelled inside the SVG in mono 11px
+`muted`, with five time labels along the bottom (three on a phone) ending in "Now". Consecutive
+buckets with data are a 2px `text` line with a 15% `muted` area under it; buckets with data separated
+only by buckets nobody polled are joined by a dashed 1.5px `muted` bridge, because "nobody looked" is
+not "it was down" but the dashes say the stretch is interpolated. A bucket that was polled and never
+succeeded breaks the line and is never bridged; a 6px bar along the bottom marks any bucket with
+failed polls, `down` when every poll failed and `unstable` when only some did. With 48 buckets of
+data or fewer every one gets a 3px dot, and the latest always gets a 4px dot in the probe's status
+colour, so three polls read as three points. Pointing or touching shows the bucket's time span, mean
+and poll counts in a tooltip; the table beneath is the accessible form of the data.
 
 **Backups.** Its own section, the same table: Outcome 132px · Job 1.4fr · Last run 1.4fr ·
 Schedule 140px, schedule in mono `muted`. Phone folds like Services.
