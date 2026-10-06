@@ -902,6 +902,55 @@ decided what theirs would mean. When plans 004 and 005 land, each opts its kind 
 `ProbeObservation.LatencyMs` now means round-trip time for ping and time to first byte for HTTP, so
 anything that compares latencies across probes must not treat them as one unit.
 
+### 3.29 A probe has a page; its history is for readers, its configuration for administrators
+
+Each probe has a page at `/probes/{id}`, reached from its name on the dashboard: state, 30-day
+uptime, a latency graph for 24 hours, 7 days or 30 days, the 50 most recent polls, and — for an
+administrator only — how the probe is configured (plan 023).
+
+**Two sources, not one.** The history comes from a new Reader-gated `GET /api/v1/status/probes/{id}`
+whose response has no host, path, URL or credential at all. The configuration block comes from the
+existing `GET /api/v1/probes/{id}`, which stays administrator-only, and the SPA does not call it
+unless the session is an administrator's, so a reader's browser never makes a request that would be
+refused. *Rejected*: one endpoint whose shape varies with the caller — a nullable `configuration`
+object that appears for administrators invites the next change to leak it, and duplicates
+`ProbeResponse`. *Rejected*: showing readers the configuration, which would reverse plan 002's
+Decision 8 (a probe's host is an internal hostname or LAN address, not fit for an anonymous
+reader). `ProbeEndpoints` and its policies are unchanged. What the page does add for readers is each
+recent poll's `Detail` string, the same kind of text `/status` already sends for the latest poll.
+
+**One allow-list per side, shared by both uses.** Which kinds plot latency is still the §3.28
+allow-list of `Ping` and `Http`, now written once on the server (`StatusEndpoints.PlotsLatency`,
+used by the sparkline and by this endpoint) and once in the SPA (`plotsLatency` in `lib/status.ts`,
+used by the dashboard and by the page). For any other kind every bucket's average is null while its
+poll and failure counts are still filled in. Plans 004 and 005 opt a kind in by editing one line per
+side.
+
+**Three ranges, fixed bucket counts, every bucket present.**
+
+| `range` | Window | Buckets | Bucket width |
+| --- | --- | --- | --- |
+| `24h` (default) | 24 h | 96 | 15 min |
+| `7d` | 7 d | 168 | 1 h |
+| `30d` | 30 d | 120 | 6 h |
+
+Buckets are measured from `now - window`, as the sparkline's are, and the response holds all of
+them, empty ones with `polls: 0`, so the client never infers a gap. A bucket's average is the mean
+latency of its successful polls. An unknown `range` is a 400 keyed `range`; the page keeps the range
+in the URL (`?range=7d`) so a range can be linked to. If `Monitoring:RetentionWindowDays` is below 30
+the 30 d view simply shows empty early buckets; it is not clamped. The table is 50 polls whatever the
+range, because tying it to the range could mean paging through 172,800 rows.
+
+**Bucketed in memory.** The endpoint loads `(ObservedAt, Succeeded, LatencyMs)` for one probe and
+window through the `(ProbeId, ObservedAt)` index and groups in C#, as `/status` does for every ping
+and HTTP probe at once; at the 15-second minimum interval that is at most 172,800 small rows for the
+30 d range. *Rejected*: translating the bucket arithmetic to SQL (`date_bin`) — unproven in this
+Npgsql setup, and the cost is not yet a measured problem. It is the first thing to try if a
+household reports a slow probe page.
+
+The header's uptime is the 30-day figure computed exactly as `/status` computes it, so it matches
+the dashboard row; the graph's caption carries the chosen range's own uptime, and both are labelled.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.

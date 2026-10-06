@@ -267,6 +267,13 @@ position in each of the sections it appears in.
 table, 60 × 18px inline after the detail on phone. 2px `muted` stroke, rounded joins, and
 a 2.5px dot on the latest point in the row's status colour. No axis, no fill.
 
+**Latency chart.** The probe page's large chart (plan 023), not a bigger sparkline: the y axis
+starts at 0 and ends at a "nice" ceiling, because it answers "how slow, in ms" rather than showing
+shape. A 2px `muted` line, broken at buckets with no data; a bar along the bottom of any bucket with
+failed polls, `down` when every poll failed and `unstable` when only some did. Axis labels are HTML in
+mono 12px `muted`, and there is no text inside the SVG, which stretches to the panel and would
+distort it.
+
 **Backups.** Its own section, the same table: Outcome 132px · Job 1.4fr · Last run 1.4fr ·
 Schedule 140px, schedule in mono `muted`. Phone folds like Services.
 
