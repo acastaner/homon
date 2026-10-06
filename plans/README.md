@@ -14,7 +14,8 @@ at execution time (see `archive/README.md`), because a plan is a record and rewr
 it a worse one.
 
 **022 is merged.** `main` carries its four commits, `54dc488`…`14af996`, fast-forwarded from
-`9c94ba0` on 2026-10-06 on the maintainer's word, after a visual check in a browser on the branch.
+`9c94ba0` on 2026-10-06 on the maintainer's word, after a visual check in a browser on the branch,
+and released as `v0.4.0` the same day — the release workflow passed and it is deployed.
 It was executed in this checkout, on `plan/022-http-ttfb-sparkline`, and the reviewer re-ran the
 suites one at a time rather than trusting the executor's report: `web` → 168 tests (167 before),
 `api` → 455 passed with 0 skips, `e2e` → 113 at both viewport projects. An HTTP probe's latency is
@@ -127,7 +128,7 @@ reviews and merges the work.
 | 019 | DONE (2026-10-01, `85b2420`, released `v0.2.0`) | M | — (builds on 002, 006, 007, 010, 012, 018) | Hide the empty ungrouped section; arrange the dashboard's sections, remembered per browser |
 | 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
 | 021 | DONE (2026-10-05, `f68ce63`, released `v0.3.0`) | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
-| 022 | DONE (2026-10-06, `14af996`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
+| 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
