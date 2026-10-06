@@ -6,6 +6,7 @@ import { RequireAdministrator } from '@/components/require-administrator'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { PagePage } from '@/pages/page-page'
 import { SignInPage } from '@/pages/sign-in-page'
+import { ProbePage } from '@/pages/probe-page'
 import { WeatherPage } from '@/pages/weather-page'
 
 // The admin pages are code-split: the family never loads them, and every one of them is
@@ -43,6 +44,8 @@ export default function App() {
             widget, not from the banner, whose two-item navigation must stay one row on a
             phone (docs/design-brief.md, Shell). */}
         <Route path="weather" element={<WeatherPage />} />
+        {/* A reader route, statically imported; reached from a dashboard row's name (plan 023). */}
+        <Route path="probes/:id" element={<ProbePage />} />
         <Route path="admin/sign-in" element={<SignInPage />} />
         <Route
           path="admin"
