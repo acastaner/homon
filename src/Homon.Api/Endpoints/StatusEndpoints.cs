@@ -12,7 +12,9 @@ namespace Homon.Api.Endpoints;
 /// <summary>
 /// <c>GET /status</c>: the dashboard's read model — totals, every probe, non-empty groups,
 /// the ungrouped ids. <see cref="HomonPolicies.Reader"/>-gated, like the rest of the
-/// dashboard. See plan 002's Decision 9.
+/// dashboard. See plan 002's Decision 9. Also <c>GET /status/probes/{id}</c>: one probe's page
+/// — state, uptime, bucketed latency for a range and its recent polls, never its configuration
+/// (plan 023).
 /// </summary>
 internal static class StatusEndpoints
 {
@@ -25,8 +27,36 @@ internal static class StatusEndpoints
             .WithName("GetStatus")
             .WithSummary("The dashboard's read model: totals, every probe, groups.");
 
+        parent.MapGet("/status/probes/{id:guid}", GetProbeHistoryAsync)
+            .RequireAuthorization(HomonPolicies.Reader)
+            .WithName("GetProbeHistory")
+            .WithSummary("One probe's page: state, uptime, bucketed latency for a range, recent polls. Never its configuration.");
+
         return parent;
     }
+
+    /// <summary>
+    /// The one server-side allow-list of kinds whose observations carry a latency worth drawing:
+    /// ping plots round-trip time and HTTP plots time to first byte (ARCHITECTURE.md §3.28, plan
+    /// 022 D6). Every other kind plots nothing until its own plan opts it in — an explicit list,
+    /// not "every kind with a latency". Shared by the dashboard sparkline and the probe page
+    /// (plan 023, D3); the SPA keeps the twin in <c>lib/status.ts</c>.
+    /// </summary>
+    private static bool PlotsLatency(ProbeKind kind) => kind is ProbeKind.Ping or ProbeKind.Http;
+
+    /// <summary>The probe page's three ranges (plan 023, D5): window, bucket count. Width = window / count.</summary>
+    private static readonly Dictionary<string, (TimeSpan Window, int Buckets)> ProbeHistoryRanges =
+        new(StringComparer.Ordinal)
+        {
+            ["24h"] = (TimeSpan.FromHours(24), 96),
+            ["7d"] = (TimeSpan.FromDays(7), 168),
+            ["30d"] = (TimeSpan.FromDays(30), 120),
+        };
+
+    private const string DefaultProbeHistoryRange = "24h";
+
+    /// <summary>How many polls the probe page's table lists, newest first (plan 023, D4).</summary>
+    private const int RecentObservationLimit = 50;
 
     private static async Task<Ok<StatusResponse>> GetStatusAsync(
         HomonDbContext database,
@@ -105,6 +135,135 @@ internal static class StatusEndpoints
             .ToArray();
 
         return TypedResults.Ok(new StatusResponse(totals, probeResponses, groupSummaries, ungroupedProbeIds, now));
+    }
+
+    /// <summary>
+    /// One probe's page (plan 023). Deliberately has no configuration: the host, path and
+    /// credentials stay behind <c>GET /probes/{id}</c>, which is administrator-only. Buckets are
+    /// built in memory from one probe's rows, as <see cref="BuildSparklinesAsync"/> does for all
+    /// of them — translating the arithmetic to SQL (<c>date_bin</c>) was rejected as unproven in
+    /// this Npgsql setup and not yet a measured cost (D6).
+    /// </summary>
+    private static async Task<Results<Ok<ProbeHistoryResponse>, NotFound, ValidationProblem>> GetProbeHistoryAsync(
+        Guid id,
+        string? range,
+        HomonDbContext database,
+        IOptionsMonitor<MonitoringOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        range ??= DefaultProbeHistoryRange;
+
+        if (!ProbeHistoryRanges.TryGetValue(range, out var shape))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["range"] = ["Range must be '24h', '7d' or '30d'."],
+            });
+        }
+
+        var probe = await database.Probes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+        if (probe is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var monitoring = options.CurrentValue;
+        var now = timeProvider.GetUtcNow();
+
+        // The header's uptime is the dashboard row's: the same retention window, the same
+        // calculator, so the two numbers agree (D7).
+        var uptimeWindowStart = now - TimeSpan.FromDays(monitoring.RetentionWindowDays);
+        var uptimeCounts = await database.ProbeObservations
+            .Where(o => o.ProbeId == id && o.ObservedAt >= uptimeWindowStart)
+            .GroupBy(o => o.ProbeId)
+            .Select(g => new { Total = g.Count(), Success = g.Count(o => o.Succeeded) })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var uptimePercent = uptimeCounts is null
+            ? null
+            : ProbeUptimeCalculator.Calculate(uptimeCounts.Success, uptimeCounts.Total);
+
+        var windowStart = now - shape.Window;
+        var bucketWidth = shape.Window / shape.Buckets;
+
+        var rows = await database.ProbeObservations
+            .AsNoTracking()
+            .Where(o => o.ProbeId == id && o.ObservedAt >= windowStart)
+            .Select(o => new { o.ObservedAt, o.Succeeded, o.LatencyMs })
+            .ToListAsync(cancellationToken);
+
+        var plots = PlotsLatency(probe.Kind);
+        var byBucket = rows
+            .GroupBy(o => Math.Clamp((int)((o.ObservedAt - windowStart) / bucketWidth), 0, shape.Buckets - 1))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var latency = new LatencyBucketResponse[shape.Buckets];
+
+        for (var i = 0; i < shape.Buckets; i++)
+        {
+            var start = windowStart + (bucketWidth * i);
+
+            if (!byBucket.TryGetValue(i, out var inBucket))
+            {
+                latency[i] = new LatencyBucketResponse(start, null, 0, 0);
+                continue;
+            }
+
+            double? average = null;
+
+            if (plots)
+            {
+                var latencies = inBucket
+                    .Where(o => o.Succeeded && o.LatencyMs is not null)
+                    .Select(o => o.LatencyMs!.Value)
+                    .ToList();
+
+                average = latencies.Count == 0 ? null : latencies.Average();
+            }
+
+            latency[i] = new LatencyBucketResponse(start, average, inBucket.Count, inBucket.Count(o => !o.Succeeded));
+        }
+
+        var totalPolls = rows.Count;
+        var totalFailures = rows.Count(o => !o.Succeeded);
+        var rangeUptime = totalPolls == 0
+            ? null
+            : ProbeUptimeCalculator.Calculate(totalPolls - totalFailures, totalPolls);
+
+        var recent = (await database.ProbeObservations
+                .AsNoTracking()
+                .Where(o => o.ProbeId == id)
+                .OrderByDescending(o => o.ObservedAt)
+                .ThenByDescending(o => o.Id)
+                .Take(RecentObservationLimit)
+                .Select(o => new { o.ObservedAt, o.Succeeded, o.LatencyMs, o.Detail })
+                .ToListAsync(cancellationToken))
+            .Select(o => new ProbeObservationResponse(
+                o.ObservedAt, o.Succeeded, plots ? o.LatencyMs : null, o.Detail))
+            .ToArray();
+
+        var message = (await BuildMessageSummariesAsync(database, [probe], now, cancellationToken))
+            .GetValueOrDefault(probe.Id);
+
+        return TypedResults.Ok(new ProbeHistoryResponse(
+            probe.Id,
+            probe.Name,
+            probe.Kind,
+            probe.Status,
+            probe.LastDetail,
+            probe.LastObservedAt,
+            uptimePercent,
+            range,
+            windowStart,
+            (int)bucketWidth.TotalSeconds,
+            rangeUptime,
+            latency,
+            recent,
+            message));
     }
 
     /// <summary>
@@ -197,8 +356,8 @@ internal static class StatusEndpoints
     /// byte (ARCHITECTURE.md §3.28). Every other kind gets an empty array until its own plan opts
     /// it in (plan 022, D6) — an explicit allow-list, not "every kind with a latency", because a
     /// message probe has none and SMB/SNMP have not decided what theirs would mean; the dashboard
-    /// keeps the matching list. A bucket with no successful observations is omitted, not zero or
-    /// null.
+    /// keeps the matching list (shared with the probe page through <see cref="PlotsLatency"/>). A
+    /// bucket with no successful observations is omitted, not zero or null.
     /// </summary>
     private static async Task<Dictionary<Guid, double[]>> BuildSparklinesAsync(
         HomonDbContext database,
@@ -209,7 +368,7 @@ internal static class StatusEndpoints
         CancellationToken cancellationToken)
     {
         var sparklineProbeIds = probes
-            .Where(p => p.Kind is ProbeKind.Ping or ProbeKind.Http)
+            .Where(p => PlotsLatency(p.Kind))
             .Select(p => p.Id)
             .ToHashSet();
 
@@ -266,6 +425,34 @@ internal static class StatusEndpoints
     /// unless its reporter is reader-visible.
     /// </summary>
     public sealed record ProbeMessageResponse(MessageStatus Status, bool Overdue, string? Body);
+
+    /// <summary>
+    /// One probe's page. It has <b>no</b> <c>Host</c>, path, URL or credential, on purpose: a
+    /// probe's host is an internal hostname or LAN address not fit for an anonymous reader (plan
+    /// 002, Decision 8), and this route is Reader-gated. An administrator's configuration block
+    /// comes from <c>GET /probes/{id}</c> instead; a caller-dependent shape here was rejected
+    /// because a nullable block that appears for admins invites the next change to leak it
+    /// (plan 023, D1).
+    /// </summary>
+    public sealed record ProbeHistoryResponse(
+        Guid Id, string Name, ProbeKind Kind, ProbeStatus State, string? Detail,
+        DateTimeOffset? LastCheckedAt, double? UptimePercent,
+        string Range, DateTimeOffset WindowStart, int BucketSeconds, double? RangeUptimePercent,
+        LatencyBucketResponse[] Latency, ProbeObservationResponse[] RecentObservations,
+        ProbeMessageResponse? Message);
+
+    /// <summary>
+    /// One bucket of the chosen range. Every bucket is present, empty ones with
+    /// <c>Polls == 0</c>, so the client never infers gaps. <c>AverageLatencyMs</c> is the mean of
+    /// successful polls' latency, null when there is none or the kind does not plot latency.
+    /// </summary>
+    public sealed record LatencyBucketResponse(DateTimeOffset Start, double? AverageLatencyMs, int Polls, int Failures);
+
+    /// <summary>
+    /// One raw poll for the table. <c>Detail</c> is the same kind of string <c>/status</c> already
+    /// sends readers for the latest poll (plan 023, D2).
+    /// </summary>
+    public sealed record ProbeObservationResponse(DateTimeOffset ObservedAt, bool Succeeded, double? LatencyMs, string? Detail);
 
     public sealed record ProbeGroupSummary(Guid Id, string Name, Guid[] ProbeIds);
 }
