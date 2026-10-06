@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 
 import { LatencyChart } from '@/components/latency-chart'
@@ -32,6 +32,10 @@ function chart(buckets: LatencyBucket[]) {
 function subpaths(testId: string): number {
   return (screen.queryByTestId(testId)?.getAttribute('d') ?? '').match(/M/g)?.length ?? 0
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('LatencyChart', () => {
   it('says so, and draws nothing, when no bucket has an average', () => {
@@ -129,5 +133,46 @@ describe('LatencyChart', () => {
     // 250 * 1.1 = 275, so a 300 ms ceiling and a 150 ms midline.
     expect(screen.getByText('300 ms')).toBeInTheDocument()
     expect(screen.getByText('150 ms')).toBeInTheDocument()
+  })
+
+  it('measures itself even when it mounts empty and only gets data on a later render', () => {
+    // A minimal ResizeObserver that reports 1000px as soon as it is told to observe something.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        callback: (entries: { contentRect: { width: number } }[]) => void
+        constructor(callback: (entries: { contentRect: { width: number } }[]) => void) {
+          this.callback = callback
+        }
+        observe() {
+          this.callback([{ contentRect: { width: 1000 } }])
+        }
+        disconnect() {}
+      },
+    )
+
+    // The measured wrapper exists only once there is data, so the chart first mounts without it;
+    // a hook that looks for its element once, on mount, never sees it and stays at the 720 fallback.
+    const props = { bucketSeconds: 900, rangeLabel: '24 hours', state: 'up' } as const
+    const { rerender } = render(<LatencyChart buckets={[empty(0)]} {...props} />)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+
+    rerender(<LatencyChart buckets={[data(0, 10), data(1, 20)]} {...props} />)
+
+    expect(screen.getByRole('img')).toHaveAttribute('width', '1000')
+  })
+
+  it('puts the tooltip beside the guide line, flipping to its left near the right edge', () => {
+    const buckets = [data(0, 10), data(1, 20), data(2, 30), data(3, 40)]
+    chart(buckets)
+    const svg = screen.getByRole('img')
+    const plotW = 720 - 52 - 12
+    const centre = (index: number) => 52 + (plotW * (index + 0.5)) / buckets.length
+
+    fireEvent.pointerMove(svg, { clientX: centre(0) })
+    expect(screen.getByTestId('latency-tooltip').style.left).toBe(`${String(centre(0) + 8)}px`)
+
+    fireEvent.pointerMove(svg, { clientX: centre(3) })
+    expect(screen.getByTestId('latency-tooltip').style.left).toBe(`${String(centre(3) - 8 - 160)}px`)
   })
 })

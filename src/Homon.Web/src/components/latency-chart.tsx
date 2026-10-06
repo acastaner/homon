@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useCallback, useRef, useState, type PointerEvent } from 'react'
 
 import { formatDuration, formatLatency, niceCeiling, type LatencyBucket } from '@/lib/probe-detail'
 import type { ProbeState } from '@/lib/status'
@@ -29,6 +29,9 @@ const MAX_DOTS = 48
 
 const TOOLTIP_WIDTH = 160
 
+/** The space between the guide line and the tooltip beside it. */
+const TOOLTIP_GAP = 8
+
 /**
  * The latest point's colour is the probe's own status colour, as `sparkline.tsx` does; copied
  * rather than imported because that one is private there and keyed on a different type. A state
@@ -47,16 +50,23 @@ const AXIS_TEXT = { className: 'mono', fontSize: 11, fill: 'var(--color-muted)' 
  * The element's own width, kept current. Falls back to `FALLBACK_WIDTH` where there is no
  * `ResizeObserver`, and ignores a zero width (an element that is not laid out yet), so the
  * fallback is never what a real browser keeps after mount.
+ *
+ * A callback ref, not an effect that looks at a ref once on mount: the measured wrapper is rendered
+ * only when there is data, so a chart that first mounts in its empty state (a new probe, a range
+ * with no polls) and gets data on a later refetch would never have had an element to observe, and
+ * would stay at the fallback inside a panel twice as wide. A callback ref runs whenever the element
+ * itself appears or goes away, however the component got there.
  */
 function useMeasuredWidth() {
-  const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(FALLBACK_WIDTH)
+  const observer = useRef<ResizeObserver | null>(null)
 
-  useEffect(() => {
-    const element = ref.current
+  const ref = useCallback((element: HTMLDivElement | null) => {
+    observer.current?.disconnect()
+    observer.current = null
 
     if (element === null || typeof ResizeObserver === 'undefined') {
-      return undefined
+      return
     }
 
     const measure = (measured: number) => {
@@ -67,16 +77,12 @@ function useMeasuredWidth() {
 
     measure(element.getBoundingClientRect().width)
 
-    const observer = new ResizeObserver((entries) => {
+    observer.current = new ResizeObserver((entries) => {
       for (const entry of entries) {
         measure(entry.contentRect.width)
       }
     })
-    observer.observe(element)
-
-    return () => {
-      observer.disconnect()
-    }
+    observer.current.observe(element)
   }, [])
 
   return { ref, width }
@@ -247,6 +253,14 @@ export function LatencyChart({
 
   const hoveredBucket = hovered === null ? null : buckets[hovered]
   const tooltipWidth = Math.min(TOOLTIP_WIDTH, width)
+  // Beside the guide line, not centred on it: centred, it covered the very point being read, so
+  // hovering a spike hid the spike. It flips to the line's left near the right edge, and is
+  // clamped inside the chart either way.
+  const guideX = hovered === null ? 0 : x(hovered)
+  const tooltipLeft = Math.min(
+    Math.max(guideX + TOOLTIP_GAP + tooltipWidth > width ? guideX - TOOLTIP_GAP - tooltipWidth : guideX + TOOLTIP_GAP, 0),
+    Math.max(width - tooltipWidth, 0),
+  )
 
   return (
     <figure className="flex flex-col gap-2">
@@ -351,10 +365,7 @@ export function LatencyChart({
             aria-hidden="true"
             data-testid="latency-tooltip"
             className="pointer-events-none absolute top-0 rounded-md border border-line bg-bg px-2 py-1 text-[12px] whitespace-nowrap"
-            style={{
-              width: tooltipWidth,
-              left: Math.min(Math.max(x(hovered) - tooltipWidth / 2, 0), Math.max(width - tooltipWidth, 0)),
-            }}
+            style={{ width: tooltipWidth, left: tooltipLeft }}
           >
             <p className="mono text-muted">{bucketSpan(hoveredBucket, bucketSeconds)}</p>
             <p>
