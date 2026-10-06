@@ -871,6 +871,37 @@ loud red "overdue by 33 days" to a reassuring grey "no report received yet", exa
 the thing died. *Rejected*: plan 008's prune-on-insert, which never runs at all for a reporter that
 has stopped reporting.
 
+### 3.28 An HTTP probe's latency is its time to first byte
+
+An HTTP probe records how long `SendAsync` takes to return, and the 30-day sparkline plots it, as
+ping's already did for round-trip time. The request is sent with `ResponseHeadersRead`, so
+`SendAsync` completes once the response headers are in — strictly the last header byte rather than
+the first, a difference not worth a custom `SocketsHttpHandler` callback. *Rejected*: instrumenting
+the socket with `ConnectCallback` / `PlaintextStreamFilter` to catch the literal first byte; it is
+far more code and would split the single named client that §3.17 and plan 003's Decision 4 rely on.
+This supersedes plan 003's "Latency" note, which timed the whole request through the capped body
+read — *rejected* here because that mixes server responsiveness with page size, and "is the service
+getting slow to respond?" is the question a household has.
+
+The body is still read and evaluated (`ExpectedBodyText` works as before) and the probe's own
+`TimeoutSeconds` still bounds the whole request including the body; only the stopwatch stops
+earlier. Redirects are inside the measurement, because the named client follows them within
+`SendAsync` and a visitor waits for them too. Connection setup is sometimes inside it and sometimes
+not: the handler is pooled and recycled, so some polls include DNS, TCP and TLS and others reuse a
+warm connection, and the daily mean flattens that. There is deliberately no "fresh connection per
+poll" setting.
+
+Observations recorded before this change hold full-request time and are left to age out with the
+30-day retention sweep, so for up to a month an HTTP sparkline mixes the two and usually shows a
+step down. *Rejected*: a data migration nulling the old values — destructive, irreversible, and a
+fix for a cosmetic effect that vanishes on its own.
+
+`/status` and the dashboard gate the sparkline on an explicit allow-list of `Ping` and `Http`, on
+both sides, not on "every kind with a latency": a message probe has none, and SMB and SNMP have not
+decided what theirs would mean. When plans 004 and 005 land, each opts its kind in at both ends.
+`ProbeObservation.LatencyMs` now means round-trip time for ping and time to first byte for HTTP, so
+anything that compares latencies across probes must not treat them as one unit.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.

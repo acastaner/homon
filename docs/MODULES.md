@@ -25,7 +25,8 @@ index, the order, and the constraints found while scaffolding so nobody rediscov
 parameters: name, destination IP, poll interval, attempts before failure — N or more
 consecutive failed polls deem the target **down**, N or more consecutive successes **up**,
 anything in between is **unstable** (orange). Ping records the RTT for a 30-day sliding
-window; older samples are dropped from the database. SMB requires credentials and a mount
+window, and HTTP its time to first byte (plan 022, §3.28); older samples are dropped from the
+database. SMB requires credentials and a mount
 target. HTTP requires a method (HEAD, GET, …), a URI (`api/health`), an optional matching
 text and/or status code (each negatable), and optional credentials (bearer key, basic auth)
 compatible with the existing services' API requirements. Admins add/edit/delete probes.

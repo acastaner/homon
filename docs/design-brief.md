@@ -38,7 +38,8 @@ service names, or number of cards. Zero probes is a state; forty is a state.
     polled), and a *paused* state for a probe the admin switched off;
   - the **uptime**, overlaid as text on/near the dot, two decimals: `98.32%`. `—` when there
     is nothing to compute;
-  - last checked ("2 min ago") and, for ping probes, room for a small RTT sparkline (30 days);
+  - last checked ("2 min ago") and, for ping and HTTP probes, room for a small latency sparkline (30
+    days — RTT for ping, time to first byte for HTTP);
   - optionally a short detail line ("HTTP 503", "share unreachable").
   The grid must read at a glance: red should be findable from across a room. A card may be
   tappable to reveal detail, but the resting state carries the answer.
@@ -262,7 +263,7 @@ position in each of the sections it appears in.
 
 **Uptime.** Mono, two decimals, `98.32%`; `—` when there is nothing to compute.
 
-**Sparkline.** Ping probes only; other probe types leave the cell empty. 88 × 22px in the
+**Sparkline.** Ping and HTTP probes only; other probe types leave the cell empty. 88 × 22px in the
 table, 60 × 18px inline after the detail on phone. 2px `muted` stroke, rounded joins, and
 a 2.5px dot on the latest point in the row's status colour. No axis, no fill.
 
