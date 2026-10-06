@@ -124,6 +124,30 @@ function statusWithAMessageProbe(message: {
   }
 }
 
+/** A probe row carrying a three-point sparkline, whatever its kind. */
+function probeWithSamples(id: string, name: string, kind: string) {
+  return {
+    id,
+    name,
+    kind,
+    state: 'up',
+    detail: null,
+    lastCheckedAt: null,
+    uptimePercent: 100,
+    sparkline: [10, 12, 11],
+    message: null,
+  }
+}
+
+/**
+ * The "30 days" cell of a probe's row. Columns: Status · Service · Detail · Uptime · 30 days ·
+ * Checked, hence index 4. Queries are scoped to this cell because StatusChip renders an
+ * aria-hidden lucide <svg> glyph of its own, so an svg anywhere in the row proves nothing.
+ */
+function sparklineCell(name: string) {
+  return screen.getByText(name).closest('tr')!.querySelectorAll('td')[4]
+}
+
 beforeEach(() => {
   window.localStorage.clear()
 })
@@ -556,5 +580,34 @@ describe('DashboardPage', () => {
 
     expect(await screen.findByText('message: success, reported 2026-10-01 04:30Z')).toBeInTheDocument()
     expect(screen.queryByText(/NAS array/)).not.toBeInTheDocument()
+  })
+
+  it('draws a sparkline for ping and http probes and none for other kinds', async () => {
+    stubFetch({
+      '/api/v1/status': {
+        body: {
+          totals: { up: 3, unstable: 0, down: 0, unknown: 0, paused: 0, uptimePercent: 100 },
+          probes: [
+            probeWithSamples('probe-ping', 'Router', 'ping'),
+            probeWithSamples('probe-http', 'Nextcloud', 'http'),
+            // The server never sends samples for an SMB probe; this pins the client-side gate.
+            probeWithSamples('probe-smb', 'NAS share', 'smb'),
+          ],
+          groups: [],
+          ungroupedProbeIds: ['probe-ping', 'probe-http', 'probe-smb'],
+          generatedAt: '2026-01-01T00:00:00Z',
+        },
+      },
+      '/api/v1/links': { body: [] },
+      '/api/v1/pages': { body: [] },
+      '/api/v1/weather': { status: 204 },
+    })
+
+    renderWithProviders(<DashboardPage />)
+
+    expect(await screen.findByText('Router')).toBeInTheDocument()
+    expect(sparklineCell('Router').querySelector('svg')).not.toBeNull()
+    expect(sparklineCell('Nextcloud').querySelector('svg')).not.toBeNull()
+    expect(sparklineCell('NAS share').querySelector('svg')).toBeNull()
   })
 })

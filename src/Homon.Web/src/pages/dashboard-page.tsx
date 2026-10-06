@@ -207,7 +207,7 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
               </td>
               <td className="mono px-4 py-3 text-right text-[14px]">{formatUptime(probe.uptimePercent)}</td>
               <td className="px-4 py-3">
-                {probe.kind === 'ping' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
+                {probe.kind === 'ping' || probe.kind === 'http' ? <Sparkline samples={probe.sparkline} state={probe.state} /> : null}
               </td>
               <td className="px-4 py-3 text-[13px] text-muted">{formatCheckedAt(probe.lastCheckedAt, now)}</td>
             </tr>

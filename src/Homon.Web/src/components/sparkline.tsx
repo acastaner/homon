@@ -8,7 +8,7 @@ const SIZE: Record<'table' | 'inline', { width: number; height: number }> = {
 }
 
 /** Only up/unstable/down/unknown get a stroke colour on the latest-point dot; paused rows
- * never show a sparkline (the brief: ping probes only, and a paused probe stops sampling). */
+ * never show a sparkline (the brief: ping and HTTP probes only, and a paused probe stops sampling). */
 const DOT_COLOR: Partial<Record<StatusChipState, string>> = {
   up: 'var(--color-up)',
   unstable: 'var(--color-unstable)',
@@ -17,7 +17,8 @@ const DOT_COLOR: Partial<Record<StatusChipState, string>> = {
 }
 
 /**
- * Ping probes only; other probe kinds leave the cell empty (docs/design-brief.md). 2px
+ * Ping and HTTP probes only (RTT and time to first byte); other probe kinds leave the cell
+ * empty (docs/design-brief.md). 2px
  * `muted` stroke, rounded joins, a 2.5px dot on the latest point in the row's status colour.
  * No axis, no fill.
  */
