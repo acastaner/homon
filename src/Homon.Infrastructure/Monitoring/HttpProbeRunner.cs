@@ -12,7 +12,8 @@ namespace Homon.Infrastructure.Monitoring;
 /// Polls a <see cref="ProbeKind.Http"/> probe: builds a request from
 /// <see cref="Probe.HttpOptions"/>, sends it through the shared named <see cref="HttpClient"/>
 /// (see <c>InfrastructureServiceCollectionExtensions.AddHomonMonitoring</c>), and evaluates
-/// status/body per plan 003's Decision 4.
+/// status/body per plan 003's Decision 4. The latency it reports is time to first byte (the
+/// response headers), not the full request including the body; see ARCHITECTURE.md §3.28.
 /// </summary>
 public sealed class HttpProbeRunner(IHttpClientFactory httpClientFactory, ISecretProtector secretProtector)
     : IProbeRunner
@@ -83,8 +84,17 @@ public sealed class HttpProbeRunner(IHttpClientFactory httpClientFactory, ISecre
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutSource.Token)
                 .ConfigureAwait(false);
 
-            var body = await ReadCappedBodyAsync(response, timeoutSource.Token).ConfigureAwait(false);
+            // Time to first byte (§3.28): with ResponseHeadersRead, SendAsync returns once the
+            // response headers are in, which is the latency we record — strictly the last header
+            // byte rather than the first, a difference not worth a socket-level callback. The body
+            // is still read and evaluated below under the same timeout, but it is no longer timed.
+            // Redirects are inside the measurement: AllowAutoRedirect follows them within SendAsync,
+            // and a visitor waits for them too. Plan 003 timed "the whole request through the
+            // capped body read"; that measures page size as much as responsiveness, so it was
+            // rejected for the sparkline this number now feeds.
             stopwatch.Stop();
+
+            var body = await ReadCappedBodyAsync(response, timeoutSource.Token).ConfigureAwait(false);
 
             var (succeeded, detail) = Evaluate(options, response.StatusCode, body);
 

@@ -253,6 +253,23 @@ public class HttpProbeRunnerTests
         Assert.StartsWith("TLS certificate error:", result.Detail);
     }
 
+    [Fact]
+    public async Task Latency_is_time_to_first_byte_and_excludes_a_slow_body()
+    {
+        var (runner, handler, _) = MakeRunner();
+        handler.Handler = (_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new SlowContent(TimeSpan.FromMilliseconds(750), "ok") });
+
+        var result = await runner.RunAsync(MakeProbe(MakeOptions(expectedBodyText: "ok")), CancellationToken.None);
+
+        // The body was still read and evaluated (D2)…
+        Assert.True(result.Succeeded);
+        Assert.Equal("HTTP 200", result.Detail);
+        // …but its 750 ms did not count. 500 leaves margin on a loaded CI box either way.
+        Assert.NotNull(result.LatencyMs);
+        Assert.True(result.LatencyMs < 500, $"LatencyMs was {result.LatencyMs}");
+    }
+
     private static (HttpProbeRunner Runner, StubHttpMessageHandler Handler, FakeSecretProtector Protector) MakeRunner()
     {
         var handler = new StubHttpMessageHandler();
@@ -317,6 +334,25 @@ public class HttpProbeRunnerTests
             return protectedValue.StartsWith("protected:", StringComparison.Ordinal)
                 ? protectedValue["protected:".Length..]
                 : protectedValue;
+        }
+    }
+
+    /// <summary>
+    /// Content whose bytes arrive only after a delay. With <c>ResponseHeadersRead</c> the delay
+    /// falls inside <c>ReadAsStreamAsync</c>, i.e. after the headers — the stand-in for a slow body.
+    /// </summary>
+    private sealed class SlowContent(TimeSpan delay, string body) : HttpContent
+    {
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            await Task.Delay(delay);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(body));
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = -1;
+            return false;
         }
     }
 }
