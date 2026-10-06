@@ -34,7 +34,7 @@ test.describe('the probe page', () => {
     const http = await request.post('/api/v1/probes', {
       data: {
         name: 'Detail http',
-        host: 'detail-http.invalid',
+        host: 'jellyfin-media-server.detail-http.invalid',
         kind: 'http',
         pollIntervalSeconds: 3600,
         failureThreshold: 2,
@@ -64,7 +64,7 @@ test.describe('the probe page', () => {
     await page.goto(`/probes/${httpId}`)
 
     await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible()
-    await expect(page.getByText('https://detail-http.invalid/health')).toBeVisible()
+    await expect(page.getByText('https://jellyfin-media-server.detail-http.invalid/health')).toBeVisible()
   })
 
   test('an anonymous reader sees no configuration and no host', async ({ browser, baseURL }) => {
@@ -80,7 +80,7 @@ test.describe('the probe page', () => {
 
     await expect(anonymousPage.getByRole('heading', { level: 1, name: 'Detail http' })).toBeVisible()
     await expect(anonymousPage.getByRole('heading', { name: 'Configuration' })).toHaveCount(0)
-    await expect(anonymousPage.getByText('detail-http.invalid')).toHaveCount(0)
+    await expect(anonymousPage.getByText('jellyfin-media-server.detail-http.invalid')).toHaveCount(0)
 
     await anonymousContext.close()
   })
@@ -100,6 +100,13 @@ test.describe('the probe page', () => {
 
     await expectNoHorizontalOverflow(page)
     await expectTappable(page, 'main button')
+
+    // The administrator's configuration block holds an unbroken mono URL built from a realistic
+    // (long) host; that is the content most likely to push a phone sideways.
+    await page.goto(`/probes/${httpId}`)
+    await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible()
+    await expect(page.getByText('https://jellyfin-media-server.detail-http.invalid/health')).toBeVisible()
+    await expectNoHorizontalOverflow(page)
   })
 
   test('it has no color-contrast violations', async ({ page }) => {

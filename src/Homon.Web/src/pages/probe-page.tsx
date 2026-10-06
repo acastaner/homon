@@ -146,7 +146,9 @@ export function ProbePage() {
                 type="button"
                 aria-pressed={option === range}
                 onClick={() => {
-                  setSearchParams(option === '24h' ? {} : { range: option })
+                  // `replace`: the range is a view setting, not a navigation, so a reader who flips
+                  // between ranges three times still gets back to the dashboard with one Back press.
+                  setSearchParams(option === '24h' ? {} : { range: option }, { replace: true })
                 }}
                 className={`${RANGE_BUTTON} ${option === range ? 'border-line-strong text-text' : 'border-line text-muted'}`}
               >
@@ -330,7 +332,11 @@ function ProbeConfiguration({ id }: { id: string }) {
         {rows.map((row) => (
           <div key={row.label} className="contents">
             <dt className="text-muted">{row.label}</dt>
-            <dd className={row.mono ? 'mono break-words' : 'break-words'}>{row.value}</dd>
+            {/* `min-w-0` + `wrap-anywhere` rather than `break-words`: `overflow-wrap: break-word` does
+                not lower an item's min-content, so in a `1fr` grid track an unbroken URL can hold the
+                column open and push a phone sideways in a browser that honours that; `anywhere` does
+                lower it. (Chromium at 412px wrapped it either way — see e2e/probe-page.spec.ts.) */}
+            <dd className={row.mono ? 'mono min-w-0 wrap-anywhere' : 'min-w-0 wrap-anywhere'}>{row.value}</dd>
           </div>
         ))}
       </dl>

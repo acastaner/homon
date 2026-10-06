@@ -15,8 +15,6 @@ import { formatDuration, formatLatency, niceCeiling, type LatencyBucket } from '
  * not `Sparkline` grown up.
  */
 
-const PANEL = 'rounded-md border border-line bg-surface'
-
 /** `1.2` rather than `1.200000001`; SVG path data does not need more than a hundredth of a bucket. */
 function coordinate(value: number): string {
   return String(Number(value.toFixed(2)))
@@ -82,9 +80,9 @@ export function LatencyChart({
 
   if (values.length === 0) {
     return (
-      <div className={`${PANEL} border-dashed border-line-strong px-4 py-3.5`}>
-        <p className="text-[13.5px] text-muted">No successful polls in the last {rangeLabel}.</p>
-      </div>
+      // Just the sentence: the page already wraps the chart in a panel, and a second dashed box
+      // inside it would be a box in a box.
+      <p className="text-[13.5px] text-muted">No successful polls in the last {rangeLabel}.</p>
     )
   }
 
