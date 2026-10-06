@@ -55,8 +55,9 @@ function detailClassName(state: ProbeState): string {
 
 /**
  * One probe's page, reached from its name on the dashboard (plan 023): state and uptime, a large
- * latency graph for 24 hours, 7 days or 30 days, the 50 most recent polls, and — for an
- * administrator only — how the probe is configured.
+ * latency graph for 24 hours, 7 days or 30 days, then — for an administrator only — how the probe
+ * is configured, then the 50 most recent polls. Configuration sits above the polls because it is
+ * short and answers "what is this probe?", where the polls are a long table.
  *
  * The history comes from the Reader-gated `/status/probes/{id}`, which never carries the host.
  * The configuration comes from the administrator-only `/probes/{id}` and is not even requested
@@ -171,6 +172,8 @@ export function ProbePage() {
         </section>
       ) : null}
 
+      {isAdministrator ? <ProbeConfiguration id={id} /> : null}
+
       <section aria-labelledby="probe-polls-heading" className="flex flex-col gap-3">
         <h2 id="probe-polls-heading" className={SECTION_LABEL}>
           Recent polls
@@ -222,8 +225,6 @@ export function ProbePage() {
           </div>
         )}
       </section>
-
-      {isAdministrator ? <ProbeConfiguration id={id} /> : null}
     </>
   )
 }

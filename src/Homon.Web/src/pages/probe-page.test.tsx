@@ -52,6 +52,43 @@ function renderPage(initialEntry = '/probes/p1') {
   )
 }
 
+/** An administrator's session and everything the Configuration block fetches, for an http probe `p1`. */
+function stubAdministrator() {
+  stubFetch({
+    '/api/v1/auth/session': { body: { kind: 'administrator', name: 'Admin' } },
+    '/api/v1/status/probes/p1?range=24h': { body: history({ name: 'Jellyfin', kind: 'http' }) },
+    '/api/v1/probes/p1': {
+      body: {
+        id: 'p1',
+        name: 'Jellyfin',
+        host: 'jellyfin.test',
+        kind: 'http',
+        pollIntervalSeconds: 60,
+        failureThreshold: 2,
+        isPaused: false,
+        position: 0,
+        status: 'up',
+        lastDetail: null,
+        lastCheckedAt: null,
+        groupIds: ['g1'],
+        http: {
+          method: 'get',
+          path: 'health',
+          useHttps: true,
+          ignoreCertificateErrors: false,
+          timeoutSeconds: 10,
+          expectedStatusCode: null,
+          expectedStatusCodeNegate: false,
+          expectedBodyText: null,
+          expectedBodyTextNegate: false,
+          credential: { type: 'bearer', username: null, hasSecret: true },
+        },
+      },
+    },
+    '/api/v1/probe-groups': { body: [{ id: 'g1', name: 'Media', probeIds: ['p1'] }] },
+  })
+}
+
 describe('ProbePage', () => {
   it('shows an anonymous reader the history and no configuration, and never asks for it', async () => {
     const calls = stubFetch({
@@ -75,39 +112,7 @@ describe('ProbePage', () => {
   })
 
   it("shows an administrator the probe's configuration", async () => {
-    stubFetch({
-      '/api/v1/auth/session': { body: { kind: 'administrator', name: 'Admin' } },
-      '/api/v1/status/probes/p1?range=24h': { body: history({ name: 'Jellyfin', kind: 'http' }) },
-      '/api/v1/probes/p1': {
-        body: {
-          id: 'p1',
-          name: 'Jellyfin',
-          host: 'jellyfin.test',
-          kind: 'http',
-          pollIntervalSeconds: 60,
-          failureThreshold: 2,
-          isPaused: false,
-          position: 0,
-          status: 'up',
-          lastDetail: null,
-          lastCheckedAt: null,
-          groupIds: ['g1'],
-          http: {
-            method: 'get',
-            path: 'health',
-            useHttps: true,
-            ignoreCertificateErrors: false,
-            timeoutSeconds: 10,
-            expectedStatusCode: null,
-            expectedStatusCodeNegate: false,
-            expectedBodyText: null,
-            expectedBodyTextNegate: false,
-            credential: { type: 'bearer', username: null, hasSecret: true },
-          },
-        },
-      },
-      '/api/v1/probe-groups': { body: [{ id: 'g1', name: 'Media', probeIds: ['p1'] }] },
-    })
+    stubAdministrator()
 
     renderPage()
 
@@ -118,6 +123,16 @@ describe('ProbePage', () => {
     expect(screen.getByText('Bearer token (stored)')).toBeInTheDocument()
     expect(screen.getByText('Media')).toBeInTheDocument()
     expect(screen.getByText('Validated')).toBeInTheDocument()
+  })
+
+  it('puts the configuration above the recent polls', async () => {
+    stubAdministrator()
+
+    renderPage()
+
+    const configuration = await screen.findByRole('heading', { name: 'Configuration' })
+    const polls = screen.getByRole('heading', { name: 'Recent polls' })
+    expect(configuration.compareDocumentPosition(polls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('switches range, which is a request and a pressed button', async () => {
