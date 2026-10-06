@@ -30,7 +30,7 @@ public sealed class MonitoringOptions
     /// <summary>How many days of <c>ProbeObservation</c> rows are retained.</summary>
     public int RetentionWindowDays { get; set; } = 30;
 
-    /// <summary>How many equal-width buckets the ping sparkline's 30-day window is split into.</summary>
+    /// <summary>How many equal-width buckets the latency sparkline's 30-day window is split into.</summary>
     public int SparklineBucketCount { get; set; } = 30;
 
     /// <summary>

@@ -192,8 +192,13 @@ internal static class StatusEndpoints
     /// <summary>
     /// The 30-day (<see cref="MonitoringOptions.RetentionWindowDays"/>) window split into
     /// <paramref name="bucketCount"/> equal-width buckets; each point is the mean
-    /// <c>LatencyMs</c> of successful observations in that bucket, for <see cref="ProbeKind.Ping"/>
-    /// probes only. A bucket with no successful observations is omitted, not zero or null.
+    /// <c>LatencyMs</c> of successful observations in that bucket. <see cref="ProbeKind.Ping"/>
+    /// probes plot round-trip time and <see cref="ProbeKind.Http"/> probes plot time to first
+    /// byte (ARCHITECTURE.md §3.28). Every other kind gets an empty array until its own plan opts
+    /// it in (plan 022, D6) — an explicit allow-list, not "every kind with a latency", because a
+    /// message probe has none and SMB/SNMP have not decided what theirs would mean; the dashboard
+    /// keeps the matching list. A bucket with no successful observations is omitted, not zero or
+    /// null.
     /// </summary>
     private static async Task<Dictionary<Guid, double[]>> BuildSparklinesAsync(
         HomonDbContext database,
@@ -203,25 +208,25 @@ internal static class StatusEndpoints
         int bucketCount,
         CancellationToken cancellationToken)
     {
-        var pingProbeIds = probes
-            .Where(p => p.Kind == ProbeKind.Ping)
+        var sparklineProbeIds = probes
+            .Where(p => p.Kind is ProbeKind.Ping or ProbeKind.Http)
             .Select(p => p.Id)
             .ToHashSet();
 
-        if (pingProbeIds.Count == 0)
+        if (sparklineProbeIds.Count == 0)
         {
             return [];
         }
 
-        var successfulPingObservations = await database.ProbeObservations
+        var successfulObservations = await database.ProbeObservations
             .Where(o => o.ObservedAt >= windowStart && o.Succeeded && o.LatencyMs != null
-                && pingProbeIds.Contains(o.ProbeId))
+                && sparklineProbeIds.Contains(o.ProbeId))
             .Select(o => new { o.ProbeId, o.ObservedAt, o.LatencyMs })
             .ToListAsync(cancellationToken);
 
         var bucketWidth = windowLength / bucketCount;
 
-        return successfulPingObservations
+        return successfulObservations
             .GroupBy(o => o.ProbeId)
             .ToDictionary(
                 probeGroup => probeGroup.Key,

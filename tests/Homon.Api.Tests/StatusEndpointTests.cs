@@ -163,6 +163,48 @@ public class StatusEndpointTests(ApiDatabaseFactory factory) : IClassFixture<Api
     }
 
     [DatabaseFact]
+    public async Task An_http_probe_with_latency_observations_gets_a_non_empty_sparkline()
+    {
+        using var client = TestClient.Create(factory);
+        await client.SignInAsync();
+
+        var response = await client.PostAsJsonAsync("/api/v1/probes", new
+        {
+            name = "Web probe",
+            host = "web.test",
+            kind = "http",
+            pollIntervalSeconds = 30,
+            failureThreshold = 2,
+            groupIds = Array.Empty<Guid>(),
+            http = new { method = "get", path = "api/health" },
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var httpProbeId = created.GetProperty("id").GetGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+            database.ProbeObservations.Add(new ProbeObservation
+            {
+                ProbeId = httpProbeId,
+                ObservedAt = DateTimeOffset.UtcNow.AddHours(-1),
+                Succeeded = true,
+                LatencyMs = 42.0,
+            });
+            await database.SaveChangesAsync();
+        }
+
+        var body = await client.GetFromJsonAsync<JsonElement>("/api/v1/status");
+        var probeResponse = body.GetProperty("probes").EnumerateArray()
+            .Single(p => p.GetProperty("id").GetGuid() == httpProbeId);
+
+        var sparkline = probeResponse.GetProperty("sparkline");
+        Assert.True(sparkline.GetArrayLength() > 0);
+        Assert.Equal(42.0, sparkline[0].GetDouble());
+    }
+
+    [DatabaseFact]
     public async Task LastCheckedAt_matches_the_most_recent_observations_ObservedAt()
     {
         using var client = TestClient.Create(factory);
