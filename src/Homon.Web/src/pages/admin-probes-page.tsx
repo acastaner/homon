@@ -14,19 +14,11 @@ import {
   type Probe,
 } from '@/lib/probes'
 import { useReporters } from '@/lib/reporters'
-import type { ProbeKind } from '@/lib/status'
+import { PROBE_KIND_LABEL } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 /** Every kind the create form offers today — `smb`/`snmp` arrive with plans 004/005. */
 const CREATABLE_KINDS: readonly ('ping' | 'http' | 'message')[] = ['ping', 'http', 'message']
-
-const KIND_LABELS: Record<ProbeKind, string> = {
-  ping: 'Ping (ICMP)',
-  http: 'HTTP/HTTPS',
-  smb: 'SMB/CIFS',
-  snmp: 'SNMP',
-  message: 'Message (a reporter pushes to us)',
-}
 
 const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
 const FIELD_LABEL = 'text-[13px] font-medium text-text'
@@ -382,7 +374,7 @@ function ProbeForm({
         </p>
       )}
       {isEditing ? (
-        <p className="text-[14px] text-muted">Kind: {KIND_LABELS[probe.kind]} — cannot be changed after creation.</p>
+        <p className="text-[14px] text-muted">Kind: {PROBE_KIND_LABEL[probe.kind]} — cannot be changed after creation.</p>
       ) : (
         <p className="flex flex-col gap-1">
           <label htmlFor="probe-kind" className={FIELD_LABEL}>
@@ -397,7 +389,7 @@ function ProbeForm({
           >
             {CREATABLE_KINDS.map((option) => (
               <option key={option} value={option}>
-                {KIND_LABELS[option]}
+                {PROBE_KIND_LABEL[option]}
               </option>
             ))}
           </select>

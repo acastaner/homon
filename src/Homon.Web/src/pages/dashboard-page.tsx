@@ -10,16 +10,15 @@ import { useCollapsedSections } from '@/lib/collapsed-sections'
 import { formatUptime } from '@/lib/format-uptime'
 import { useLinks } from '@/lib/links'
 import { usePublishedPages } from '@/lib/pages'
-import { MESSAGE_STATUS_WORD } from '@/lib/reporters'
 import { orderSections, useSectionOrder } from '@/lib/section-order'
 import {
   dashboardSections,
   formatCheckedAt,
+  messageChipWord,
   summariseProbeStates,
   useStatus,
   type DashboardSection,
   type ProbeState,
-  type StatusProbe,
 } from '@/lib/status'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 import {
@@ -216,20 +215,6 @@ function probeSectionBody(section: DashboardSection, now: Date): ReactNode {
       </table>
     </div>
   )
-}
-
-/**
- * The chip word for a message probe, or undefined for every other kind — which leaves
- * `StatusChip` to its own up/unstable/down vocabulary. Overdue is called out by name rather than
- * left as "Failed": "Overdue" is the difference between a backup that ran and failed and one that
- * never ran at all, and it is the first thing a reader wants to know.
- */
-function messageChipWord(probe: StatusProbe): string | undefined {
-  if (probe.kind !== 'message' || probe.message === null) {
-    return undefined
-  }
-
-  return probe.message.overdue ? 'Overdue' : MESSAGE_STATUS_WORD[probe.message.status]
 }
 
 /** The weather panel and its four states: not configured, temporarily unavailable, loaded, loading. */

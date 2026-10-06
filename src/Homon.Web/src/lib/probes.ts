@@ -94,6 +94,20 @@ export function fetchProbes(): Promise<Probe[]> {
   return apiFetch<Probe[]>('/probes')
 }
 
+/**
+ * One probe's configuration, for the probe page's administrator-only block. The endpoint is
+ * `AdministratorOrApiKey` (it carries the host), so the page passes `enabled: false` for a
+ * reader instead of letting it 401/403 (plan 023, D1). The key nests under `PROBES_QUERY_KEY`,
+ * so the existing probe mutations' invalidation reaches it.
+ */
+export function useProbe(id: string, options: { enabled: boolean }) {
+  return useQuery({
+    queryKey: [...PROBES_QUERY_KEY, id],
+    queryFn: () => apiFetch<Probe>(`/probes/${id}`),
+    enabled: options.enabled,
+  })
+}
+
 export function useProbes() {
   return useQuery({ queryKey: PROBES_QUERY_KEY, queryFn: fetchProbes })
 }

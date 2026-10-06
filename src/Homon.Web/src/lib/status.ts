@@ -1,10 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { apiFetch } from '@/lib/api'
-import type { MessageStatus } from '@/lib/reporters'
+import { MESSAGE_STATUS_WORD, type MessageStatus } from '@/lib/reporters'
 
 /** Mirrors ProbeKind in Homon.Domain/Monitoring/ProbeKind.cs. */
 export type ProbeKind = 'ping' | 'http' | 'smb' | 'snmp' | 'message'
+
+/**
+ * Whether a kind has a latency worth drawing: ping plots round-trip time and HTTP plots time to
+ * first byte (ARCHITECTURE.md §3.28). An explicit allow-list, not "every kind with a latency".
+ * The server twin is `StatusEndpoints.PlotsLatency`; plans 004/005 opt a kind in by changing
+ * both, and changing only one gives an empty chart or a payload nobody draws (plan 023, D3).
+ */
+export function plotsLatency(kind: ProbeKind): boolean {
+  return kind === 'ping' || kind === 'http'
+}
+
+/** The human name of each kind, as the admin form and the probe page show it. */
+export const PROBE_KIND_LABEL: Record<ProbeKind, string> = {
+  ping: 'Ping (ICMP)',
+  http: 'HTTP/HTTPS',
+  smb: 'SMB/CIFS',
+  snmp: 'SNMP',
+  message: 'Message (a reporter pushes to us)',
+}
 
 /** Mirrors ProbeStatus in Homon.Domain/Monitoring/ProbeStatus.cs. */
 export type ProbeState = 'unknown' | 'up' | 'unstable' | 'down' | 'paused'
@@ -85,6 +104,20 @@ export function useStatus() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   })
+}
+
+/**
+ * The chip word for a message probe, or undefined for every other kind — which leaves
+ * `StatusChip` to its own up/unstable/down vocabulary. Overdue is called out by name rather than
+ * left as "Failed": "Overdue" is the difference between a backup that ran and failed and one that
+ * never ran at all, and it is the first thing a reader wants to know.
+ */
+export function messageChipWord(probe: Pick<StatusProbe, 'kind' | 'message'>): string | undefined {
+  if (probe.kind !== 'message' || probe.message === null) {
+    return undefined
+  }
+
+  return probe.message.overdue ? 'Overdue' : MESSAGE_STATUS_WORD[probe.message.status]
 }
 
 /** One rendered section of the dashboard's Services area: a group, or the ungrouped rest. */
