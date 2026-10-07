@@ -17,6 +17,7 @@
 - **Depends on**: none. It builds on 012 (tokens), 021 (reporters, keys) and 024 (the Probes page).
 - **Category**: direction (design consistency) + tech-debt (the class constants copied into 8 files)
 - **Planned at**: commit `fd3f598`, 2026-10-07
+- **Outcome**: DONE — merged to `main` as `1202c67` (2026-10-07) after an independent review; `web` 239, `e2e` 133
 
 ## Why this matters
 

@@ -13,6 +13,16 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
+**025 is merged.** `main` carries its twelve commits, `ea79e11`…`1202c67`, fast-forwarded from `fd3f598` on
+2026-10-07 on the maintainer's word after a manual check in a browser on the branch. Every admin page now follows
+the Probes page's look, from one set of primitives under `src/Homon.Web/src/components/` (`docs/ARCHITECTURE.md`
+§3.30); the design is the canvas "Homon Admin pages", <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>, and
+where it disagrees with the plan the plan's D1–D16 won. It was the first plan executed by a dispatched agent in this
+checkout and reviewed independently: the reviewer re-ran the suites one at a time — `web` → 239 tests (203 before),
+`e2e` → 133 (125 before; +4 contrast checks per project). No C# changed. **One trap for anyone upgrading a
+development database:** the Admin home now fetches `/reporters`, so a database still missing 021's `AddMessaging`
+migration fails on the very first admin click (`relation "Reporters" does not exist`) — run the `migrate` verb.
+
 **024 is merged.** `main` carries one commit, `9adce5f`, fast-forwarded from `be1fbd4` on 2026-10-07 on
 the maintainer's word after a manual check in a browser on the branch. `/admin/probes` now lists probes in
 the dashboard's sections and order, and moving a grouped probe reorders its group rather than
@@ -159,7 +169,7 @@ reviews and merges the work.
 | 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
-| 025 | planned | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
+| 025 | DONE (2026-10-07, `1202c67`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
