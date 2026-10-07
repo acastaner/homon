@@ -76,10 +76,23 @@ Rollback with no migration in the release: edit `HOMON_VERSION` back and `up -d`
 migration: restore the dump first (`pg_restore --clean` into the `postgres` service), then
 roll the version back.
 
+## Alert email
+
+After upgrading to the release that adds alerts (plan 026), open `/admin/alerts`: enter the Resend
+API key, a From address on a Resend-verified domain and the recipients, save, then press "Send
+test email" and watch the row turn Sent.
+
+- The data-protection key ring now also protects the Resend key. Losing it means entering the key
+  again; the page's delivery rows say "can no longer be read".
+- The old `.env` variables for the Resend token, the From address and the recipients are ignored now
+  and may be deleted.
+- `deploy.sh` does not copy `compose.prod.yaml`. The old copy still works (it passes variables nobody
+  reads) but still demands them, so copy the new one across.
+
 ## The key ring
 
 `dataprotection-keys` protects session cookies and, once the Monitoring module lands, every
-stored probe secret. Losing it logs everyone out and means re-entering every SMB password
+stored probe secret and the Resend API key. Losing it logs everyone out and means re-entering every SMB password
 and HTTP token. Export it whenever the restic job runs:
 
 ```bash

@@ -65,7 +65,7 @@ call"). The section's visual treatment is otherwise undecided — plan 012's cal
 Email, password, "Keep me signed in", one button, one error line (the server's sentence,
 verbatim). A note when no administrator is configured on the installation.
 
-### Admin (`/admin`, `/admin/probes`, `/admin/probe-groups`, `/admin/links`, `/admin/pages`, `/admin/api-keys`)
+### Admin (`/admin`, `/admin/probes`, `/admin/probe-groups`, `/admin/links`, `/admin/pages`, `/admin/api-keys`, `/admin/alerts`)
 
 Desktop-first is acceptable. Each is a list with add / edit / delete:
 

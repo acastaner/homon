@@ -115,8 +115,12 @@ races for on boot. `dotnet run -- migrate` is also how a developer applies them.
 `IAlertEmailSender.SendAsync(EmailMessage)` — a single generic method, because alerts are
 the only mail Homon sends and the alerting module owns the templates. `ResendEmailSender`
 and `LoggingEmailSender` are both registered; which one resolves is decided from
-`IOptions<EmailOptions>` at resolve time, so a test's configuration override wins, and a
-development machine never mails anyone. A Production host without a token refuses to start.
+`IOptions<EmailOptions>` at resolve time, so a test's configuration override wins. The one
+configuration switch is `Email:Transport` (`Resend`, the default, or `Log`); a Production host
+refuses `Log`, so it cannot silently log alerts instead of sending them, and the API test host
+and the Playwright suite set `Log`, so the gate never mails anyone. The Resend key and the
+sender come from the `AlertSettings` database row on every send, not from configuration
+(plan 026, §3.31).
 
 ### 3.8 The gate runs locally and refuses skips
 
@@ -278,9 +282,9 @@ validation together); flat nullable scalar columns prefixed by kind (four kinds 
 is 20+ mostly-null columns with no natural home for negation flags).
 
 **Secrets.** `Homon.Infrastructure.Security.ISecretProtector`, backed by ASP.NET Data
-Protection (`DataProtectionSecretProtector`), is the one seam every probe secret Homon ever
-stores goes through — the HTTP bearer token or basic-auth password today, the SMB password
-and calendar credentials later — under a single purpose string (`"Homon.Secrets.v1"`), not
+Protection (`DataProtectionSecretProtector`), is the one seam every secret Homon ever
+stores goes through — the HTTP bearer token or basic-auth password today, the Resend API key
+(plan 026), the SMB password and calendar credentials later — under a single purpose string (`"Homon.Secrets.v1"`), not
 one per kind, so a key-ring export/import covers every stored secret together. The key ring
 is the `dataprotection-keys` volume in production (`docs/MODULES.md`); losing it means
 every `Unprotect()` throws `CryptographicException`, which a runner catches and turns into
@@ -971,6 +975,41 @@ button is held by `e2e/layout.spec.ts`.
   appears only when it is not the current one. Tests never pin its text.
 - **Revoke stays on a reporter's paired key** on the API keys page. The page splits "Script keys"
   from "Reporter keys", but a styling pass does not remove a capability.
+
+### 3.31 Alerts: the outage is probe state, delivery is an outbox, settings are a database row
+
+Plan 026. Homon emails the household when a probe is declared Down and again when it is Up, saying
+how long it was down.
+
+- **The outage is probe state.** `Probe.DownSince` is set on entering Down (when none is open) and
+  cleared on reaching Up, only inside `Probe.RecordObservation`, which returns a
+  `ProbeOutageChange`. Down, Unstable, Down flapping sends no second mail; Unstable never mails; a
+  message probe's Down, Unknown, Up recovers normally; `Pause`, `Unpause` and
+  `ChangeFailureThreshold` do not touch it. Because status and `DownSince` are persisted, a
+  restart sends nothing spurious. Downtime runs from when Homon declared Down to when it declared
+  Up. *Rejected*: rebuilding the start from `ProbeObservations` (a message probe's `Succeeded` does
+  not map to its status, a derived Unknown writes no row, rows are swept after 30 days); keeping it
+  in memory (lost on restart).
+- **Delivery is an outbox.** The scheduler adds an `AlertNotification` row in its existing single
+  save, so the status change and the mail that announces it commit together. `AlertDispatcher`
+  (a second `BackgroundService`) sends due `Pending` rows, retrying up to 5 times with 1, 2, 4 and
+  8 minute backoff before `Failed`. Rows are written even when alerts are off and marked `Skipped`
+  with the reason; finished rows older than 30 days are pruned at most hourly. *Rejected*: an
+  in-memory channel, which a Resend outage or a restart would turn into silently lost mail and
+  which the page could not show. Single-instance by design; two dispatchers would race, and
+  `FOR UPDATE SKIP LOCKED` is the answer if that ever changes.
+- **Settings are a singleton database row** (`AlertSettings`, the `WeatherSettings` pattern) and
+  the Alerts admin page is the only source. The Resend key goes through `ISecretProtector` and is
+  write-only on the wire (§3.17). `Email:Transport` (`Resend` | `Log`) is the one setting left in
+  configuration; see §3.7.
+- **Templates** are plain text plus a small HTML part built in code (`AlertMessageBuilder`), every
+  interpolated value HTML-encoded, times in UTC (no time-zone setting yet), links built from
+  `FrontEnd:PublicBaseUrl`.
+- **A test send is an outbox row** (`POST /alerts/test` returns 202). It shows up in Recent alerts
+  and turns Sent or Failed, which avoids a `role="status"` message the design brief reserves for the
+  session check. It is sent even when alerts are off, never when they are not set up.
+- **The Admin home stays client-side** (§3.30). Alerts is its eighth summary query, the threshold
+  §3.30 named; one small GET is accepted.
 
 ## 4. Things this record does not yet decide
 

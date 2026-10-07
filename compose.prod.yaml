@@ -103,13 +103,7 @@ services:
       # scheme, which is what makes one setting correct on both paths.
       Auth__AllowPlainTextSessions: ${HOMON_ALLOW_PLAINTEXT_SESSIONS:-false}
 
-      Email__ResendApiToken: ${RESEND_API_TOKEN:?set RESEND_API_TOKEN}
-      Email__FromAddress: ${HOMON_FROM_ADDRESS:?set HOMON_FROM_ADDRESS}
-      Email__FromName: Homon
-      # Comma-separated in .env; the __0, __1 spelling is how .NET binds an array from
-      # the environment, so the list is split here. Extend the pattern for a third address.
-      Email__AlertRecipients__0: ${HOMON_ALERT_RECIPIENT_1:?set HOMON_ALERT_RECIPIENT_1}
-      Email__AlertRecipients__1: ${HOMON_ALERT_RECIPIENT_2:-}
+      # Alert email (Resend key, sender, recipients) is set on the Alerts admin page and stored in the database (plan 026). Nothing to configure here.
 
       # The administrator lives here and nowhere else. It has no database row, so a
       # database compromise yields nothing that can sign in as one. Only the hash is held;

@@ -100,7 +100,8 @@ spawns the servers through `sh -c`, which drops names that are not valid identif
 `Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=Warning` reaches nothing,
 silently. Such keys are passed as `--key=value` command-line arguments instead.
 
-**The suite must not be able to send email.** `dotnet run` in Development loads the
-developer's user-secrets store, which may hold a real `Email:ResendApiToken`.
-`Email__ResendApiToken: ''` in the webServer environment is what puts `LoggingEmailSender`
-back. Do not remove it.
+**The suite must not be able to send email.** The Resend key is a database row that
+`alerts.spec.ts` fills in through the Alerts page, and `dotnet run` in Development defaults to
+the Resend transport (and loads the developer's user-secrets store, which may say so too).
+`Email__Transport: 'Log'` in the webServer environment is what puts `LoggingEmailSender`
+in charge, so a test email turns Sent by being logged. Do not remove it.

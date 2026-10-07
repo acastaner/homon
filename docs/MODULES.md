@@ -13,7 +13,7 @@ index, the order, and the constraints found while scaffolding so nobody rediscov
 | 006 | Links | `Domain/Links/` | URL, title, description, order; admin CRUD; new tab always |
 | 007 | Pages | `Domain/Pages/` | Slug, title, sanitised HTML body; WYSIWYG editor; `/pages/{slug}` |
 | ~~008~~ | ~~Backups + API-key admin~~ | — | Superseded by 021: the generic gateway does this, with a backup as `category: backup` |
-| 009 | Alerts | cross-cutting | Email on unstable/down via `IAlertEmailSender`, recipients from `Email:AlertRecipients` |
+| 026 | Alerts | cross-cutting | Email on Down and back-Up via an outbox; settings on `/admin/alerts` (supersedes 009) |
 | 010 | Weather | `Domain/Weather/` | One location, cached provider answer |
 | 011 | Calendar | `Domain/Calendar/` | Several ICS sources merged, colour per source |
 | 012 | Design pass | `src/Homon.Web/` | Tokens, components, dark mode — from `docs/design-brief.md` |
@@ -47,8 +47,10 @@ and `docs/message-reporting.md`.)*
 **Dashboard.** Very simple and very clear. One card per service with a green/yellow/red dot
 and the uptime overlaid as text with two decimals (`98.32%`). Reactive; works on mobile.
 
-**Alerts.** Email through Resend when a service goes unstable or down; the key lives in
-`.env` beside the container.
+**Alerts.** Email through Resend when a service goes down, and again when it is back up with how
+long it was down. Delivery goes through a database outbox, so a Resend hiccup is retried rather
+than lost. The Resend key, sender and recipients are set on the Alerts admin page and stored in
+the database; the key is encrypted like probe secrets. Unstable does not mail.
 
 **Pages.** A light pages/articles feature with WYSIWYG editing for a few explanation pages.
 
@@ -121,6 +123,6 @@ relayed — see `docs/ARCHITECTURE.md` §3.24.)*
 **Calendar.** ICS URLs first (public or private links from Google/Apple/Nextcloud); CalDAV
 later. Credentials, when needed, are encrypted like probe secrets.
 
-**Alert recipients.** `Email:AlertRecipients` binds a list; `compose.prod.yaml` maps two
-`.env` variables onto `__0` and `__1`. When the module lands, a Production host with a Resend
-token and an empty list should refuse to start, the way a missing token does today.
+**Alert recipients.** Up to ten addresses on the Alerts admin page, stored on the `AlertSettings`
+row. Nothing is read from `.env` or configuration; the only setting there is `Email:Transport`,
+which Production requires to be `Resend`.
