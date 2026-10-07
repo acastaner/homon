@@ -1,5 +1,28 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
+import { Ban, Clock, Plus } from 'lucide-react'
 
+import {
+  ALERT,
+  BUTTON_PRIMARY,
+  CARD_FORM,
+  COLUMN_HEAD,
+  EMPTY_STATE,
+  FIELD_INPUT,
+  FIELD_LABEL,
+  PANEL,
+  ROW,
+  ROW_CELLS,
+  ROW_TINT,
+} from '@/components/admin-classes'
+import { AdminPageHeader, jumpToField } from '@/components/admin-page-header'
+import { AdminSection } from '@/components/admin-section'
+import { ConfirmStrip } from '@/components/confirm-strip'
+import { IconButton } from '@/components/icon-button'
+import { KeyReveal } from '@/components/key-reveal'
+import { Stamp } from '@/components/stamp'
+import { StatusChip } from '@/components/status-chip'
+import { summariseApiKeys } from '@/lib/admin-summary'
 import { problemDetail } from '@/lib/api'
 import {
   useApiKeys,
@@ -9,34 +32,28 @@ import {
   type ApiKeyFields,
   type ApiKeyScope,
 } from '@/lib/api-keys'
+import { formatStamp } from '@/lib/format-stamp'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 const EMPTY_FIELDS: ApiKeyFields = { name: '', scope: 'read', expiresAt: '' }
 
-const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
-const FIELD_LABEL = 'text-[13px] font-medium text-text'
-const FIELD_INPUT =
-  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
-const BUTTON_SECONDARY =
-  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_PRIMARY =
-  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_DANGER =
-  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
-const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
-const REVEAL =
-  'flex flex-col gap-2 rounded-md border border-unstable/40 bg-unstable-bg px-3 py-2.5 text-[14px] text-text'
-const EMPTY_STATE =
-  'rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted'
-
 const SCOPE_LABELS: Record<ApiKeyScope, string> = { read: 'Read', readWrite: 'Read and write' }
+
+/*
+ * One grid per row, so every row and the column head share this template or the columns stop
+ * lining up. Below `lg` a row folds as the Probes page's does: key and state on the first line, the
+ * muted facts (token, pairing, scope, dates) on the second, the revoke button on the third.
+ */
+const ROW_GRID =
+  'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[156px_minmax(0,1.2fr)_124px_112px_128px_128px_64px] lg:gap-x-3.5'
 
 /**
  * The API keys admin page: what exists, minting one, and revoking one. A key is never deleted —
  * revoking stamps it and leaves the row, which is the audit trail.
  *
- * A reporter's own key is listed here but can only be replaced or removed from the Reporters page,
- * where the consequence of doing so is visible.
+ * A reporter's own key is listed here, in its own section, but is replaced from the Reporters page,
+ * where the consequence of doing so is visible. Revoke stays on it all the same (plan 025's D12):
+ * a styling pass must not take a capability away.
  */
 export function AdminApiKeysPage() {
   useDocumentTitle(pageTitle('API keys', 'Admin'))
@@ -51,95 +68,68 @@ export function AdminApiKeysPage() {
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null)
 
   const rows = apiKeys.data ?? []
+  const scriptKeys = rows.filter((key) => key.reporterName === null)
+  const reporterKeys = rows.filter((key) => key.reporterName !== null)
 
   return (
     <>
-      <h1 className={PAGE_H1}>API keys</h1>
-      <p className="text-[14px] text-muted">
-        A key lets a script read the API; a read-and-write key may also file reports. Keys never
-        administer anything. A fresh install can still mint its first key with{' '}
-        <code className="mono rounded bg-surface px-1.5 py-0.5">create-api-key</code>, before anyone
-        can sign in.
-      </p>
+      <AdminPageHeader
+        title="API keys"
+        description={
+          <>
+            A key lets a script read the API; a read-and-write key may also file reports. Keys never administer
+            anything. A fresh install can still mint its first key with{' '}
+            <code className="mono rounded bg-surface px-1.5 py-0.5">create-api-key</code>, before anyone can sign in.
+          </>
+        }
+        count={summariseApiKeys(rows).text}
+      >
+        <button type="button" onClick={() => jumpToField('api-key-name')} className={BUTTON_PRIMARY}>
+          <Plus aria-hidden="true" size={16} strokeWidth={2.25} />
+          New key
+        </button>
+      </AdminPageHeader>
       {revealed !== null ? (
-        <div role="alert" className={REVEAL}>
-          <p className="font-semibold">This key will not be shown again. Store it now.</p>
-          <p className="flex flex-col gap-1">
-            <label htmlFor="revealed-api-key" className={FIELD_LABEL}>
-              API key for {revealed.name}
-            </label>
-            <input id="revealed-api-key" readOnly value={revealed.token} className={`${FIELD_INPUT} mono`} />
-          </p>
-          <p className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard?.writeText(revealed.token)}
-              className={BUTTON_SECONDARY}
-            >
-              Copy key
-            </button>
-            <button type="button" onClick={() => setRevealed(null)} className={BUTTON_SECONDARY}>
-              Done
-            </button>
-          </p>
-        </div>
+        <KeyReveal inputId="revealed-api-key" name={revealed.name} token={revealed.token} onDone={() => setRevealed(null)} />
       ) : null}
       {revokeApiKey.isError ? (
         <p role="alert" className={ALERT}>
           {problemDetail(revokeApiKey.error) ?? 'Could not revoke the key. Try again.'}
         </p>
       ) : null}
-      {rows.length === 0 ? (
-        <p className={EMPTY_STATE}>No API keys yet. Mint one below.</p>
-      ) : (
-        <ol
-          aria-label="API keys"
-          className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4"
-        >
-          {rows.map((key) => (
-            <li key={key.id} className="flex flex-col gap-2 py-3">
-              <p className="flex flex-wrap items-baseline gap-2">
-                <span className="text-[15px] font-semibold">{key.name}</span>
-                <span className="mono text-[13px] text-muted">{key.tokenId}</span>
-                <span className="text-[13px] text-muted">{SCOPE_LABELS[key.scope]}</span>
-              </p>
-              <p className="text-[13px] text-muted">{describe(key)}</p>
-              <p className="flex flex-wrap gap-2">
-                {confirmingRevokeId === key.id ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        revokeApiKey.mutate(key.id)
-                        setConfirmingRevokeId(null)
-                      }}
-                      className={BUTTON_DANGER}
-                    >
-                      Confirm revoke {key.name} ({key.tokenId})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingRevokeId(null)}
-                      className={BUTTON_SECONDARY}
-                    >
-                      Cancel revoke {key.name} ({key.tokenId})
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingRevokeId(key.id)}
-                    disabled={key.revokedAt !== null}
-                    className={BUTTON_DANGER}
-                  >
-                    Revoke {key.name} ({key.tokenId})
-                  </button>
-                )}
-              </p>
-            </li>
-          ))}
-        </ol>
-      )}
+      {rows.length === 0 ? <p className={EMPTY_STATE}>No API keys yet. Mint one below.</p> : null}
+      {scriptKeys.length > 0 ? (
+        <KeySection
+          id="script-keys"
+          heading="Script keys"
+          meta="Minted and revoked here"
+          keys={scriptKeys}
+          confirmingRevokeId={confirmingRevokeId}
+          isRevoking={revokeApiKey.isPending}
+          onAskRevoke={(id) => setConfirmingRevokeId((current) => (current === id ? null : id))}
+          onCancelRevoke={() => setConfirmingRevokeId(null)}
+          onConfirmRevoke={(id) => {
+            revokeApiKey.mutate(id)
+            setConfirmingRevokeId(null)
+          }}
+        />
+      ) : null}
+      {reporterKeys.length > 0 ? (
+        <KeySection
+          id="reporter-keys"
+          heading="Reporter keys"
+          meta="One per reporter · replace it on the Reporters page"
+          keys={reporterKeys}
+          confirmingRevokeId={confirmingRevokeId}
+          isRevoking={revokeApiKey.isPending}
+          onAskRevoke={(id) => setConfirmingRevokeId((current) => (current === id ? null : id))}
+          onCancelRevoke={() => setConfirmingRevokeId(null)}
+          onConfirmRevoke={(id) => {
+            revokeApiKey.mutate(id)
+            setConfirmingRevokeId(null)
+          }}
+        />
+      ) : null}
       <ApiKeyForm
         fields={fields}
         onFieldsChange={setFields}
@@ -149,6 +139,164 @@ export function AdminApiKeysPage() {
         }}
       />
     </>
+  )
+}
+
+function KeySection({
+  id,
+  heading,
+  meta,
+  keys,
+  confirmingRevokeId,
+  isRevoking,
+  onAskRevoke,
+  onCancelRevoke,
+  onConfirmRevoke,
+}: {
+  id: string
+  heading: string
+  meta: string
+  keys: ApiKey[]
+  confirmingRevokeId: string | null
+  isRevoking: boolean
+  onAskRevoke: (id: string) => void
+  onCancelRevoke: () => void
+  onConfirmRevoke: (id: string) => void
+}) {
+  return (
+    <AdminSection id={id} heading={heading} meta={meta}>
+      <div className={PANEL}>
+        <div aria-hidden="true" className={`${ROW_GRID} ${COLUMN_HEAD}`}>
+          <span>State</span>
+          <span>Key</span>
+          <span>Scope</span>
+          <span>Created</span>
+          <span>Last used</span>
+          <span>Expires</span>
+          <span className="text-right">Actions</span>
+        </div>
+        <ol aria-label={heading} className="flex list-none flex-col">
+          {keys.map((key) => (
+            <KeyRow
+              key={key.id}
+              apiKey={key}
+              isConfirmingRevoke={confirmingRevokeId === key.id}
+              isRevoking={isRevoking}
+              onAskRevoke={() => onAskRevoke(key.id)}
+              onCancelRevoke={onCancelRevoke}
+              onConfirmRevoke={() => onConfirmRevoke(key.id)}
+            />
+          ))}
+        </ol>
+      </div>
+    </AdminSection>
+  )
+}
+
+function KeyRow({
+  apiKey,
+  isConfirmingRevoke,
+  isRevoking,
+  onAskRevoke,
+  onCancelRevoke,
+  onConfirmRevoke,
+}: {
+  apiKey: ApiKey
+  isConfirmingRevoke: boolean
+  isRevoking: boolean
+  onAskRevoke: () => void
+  onCancelRevoke: () => void
+  onConfirmRevoke: () => void
+}) {
+  const isRevoked = apiKey.revokedAt !== null
+  const label = `${apiKey.name} (${apiKey.tokenId})`
+  const confirmId = `api-key-confirm-revoke-${apiKey.id}`
+  // Revoked wins over expired: a key that is both reads Revoked, here and in the page's count.
+  const isExpired = !isRevoked && apiKey.isExpired
+
+  return (
+    <li className={ROW}>
+      <div className={`${ROW_GRID} ${ROW_CELLS} ${isRevoked ? ROW_TINT.paused : ''}`}>
+        <span className="col-start-2 row-start-1 flex lg:col-start-auto lg:row-start-auto">
+          {apiKey.revokedAt !== null ? (
+            // The revocation date lives inside the chip, so "Revoked" is written exactly once per row.
+            <StatusChip
+              state="paused"
+              word={`Revoked ${formatStamp(apiKey.revokedAt, { time: false })}`}
+              glyph={Ban}
+            />
+          ) : isExpired ? (
+            <StatusChip state="unknown" word="Expired" glyph={Clock} />
+          ) : (
+            <StatusChip state="up" word="Active" />
+          )}
+        </span>
+        <span className="col-start-1 row-start-1 flex min-w-0 flex-col lg:col-start-auto lg:row-start-auto">
+          <span className={`truncate text-[15px] font-semibold ${isRevoked ? 'text-muted' : ''}`}>{apiKey.name}</span>
+          <span className="mono truncate text-[13px] text-muted">{apiKey.tokenId}</span>
+          {apiKey.reporterName !== null ? (
+            <Link
+              to="/admin/reporters"
+              className="w-fit text-[13px] text-muted underline decoration-line-strong underline-offset-[3px] hover:text-text hover:decoration-text"
+            >
+              {`Paired with the reporter ${apiKey.reporterName}`}
+            </Link>
+          ) : null}
+        </span>
+        {/* One wrapping line under the name below lg; four cells of the grid at lg (`contents`). */}
+        <span className="col-span-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted lg:contents">
+          <span className="text-text lg:text-muted">{SCOPE_LABELS[apiKey.scope]}</span>
+          <span>
+            <span className="lg:hidden">Created </span>
+            <Stamp iso={apiKey.createdAt} time={false} />
+          </span>
+          <span>
+            {apiKey.lastUsedAt === null ? (
+              'Never used'
+            ) : (
+              <>
+                <span className="lg:hidden">Last used </span>
+                <Stamp iso={apiKey.lastUsedAt} />
+              </>
+            )}
+          </span>
+          <span>
+            {apiKey.expiresAt === null ? (
+              'Never'
+            ) : (
+              <>
+                {apiKey.isExpired ? 'Expired ' : <span className="lg:hidden">Expires </span>}
+                <Stamp iso={apiKey.expiresAt} time={false} />
+              </>
+            )}
+          </span>
+        </span>
+        <span className="col-span-2 flex items-center justify-end lg:col-span-1">
+          <IconButton
+            icon={Ban}
+            tone="danger"
+            label={`Revoke ${label}`}
+            title="Revoke"
+            disabled={isRevoked}
+            onClick={onAskRevoke}
+            aria-expanded={isConfirmingRevoke}
+            aria-controls={isConfirmingRevoke ? confirmId : undefined}
+          />
+        </span>
+      </div>
+      {isConfirmingRevoke ? (
+        <ConfirmStrip
+          id={confirmId}
+          question={`Revoke ${apiKey.name}? It stops working at once.`}
+          confirmText="Revoke"
+          confirmLabel={`Confirm revoke ${label}`}
+          cancelLabel={`Cancel revoke ${label}`}
+          onConfirm={onConfirmRevoke}
+          onCancel={onCancelRevoke}
+          isPending={isRevoking}
+        />
+      ) : null}
+    </li>
   )
 }
 
@@ -173,87 +321,67 @@ function ApiKeyForm({
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      aria-labelledby="api-key-form-heading"
-      className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5"
-    >
+    <form onSubmit={onSubmit} aria-labelledby="api-key-form-heading" className={CARD_FORM}>
       <h2 id="api-key-form-heading" className="text-[15px] font-semibold">
-        Mint a key
+        New key
       </h2>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="api-key-name" className={FIELD_LABEL}>
-          Name
-        </label>
-        <input
-          id="api-key-name"
-          name="name"
-          required
-          maxLength={100}
-          value={fields.name}
-          onChange={(event) => onFieldsChange({ ...fields, name: event.target.value })}
-          className={FIELD_INPUT}
-        />
-      </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="api-key-scope" className={FIELD_LABEL}>
-          Scope
-        </label>
-        <select
-          id="api-key-scope"
-          name="scope"
-          value={fields.scope}
-          onChange={(event) => onFieldsChange({ ...fields, scope: event.target.value as ApiKeyScope })}
-          className={FIELD_INPUT}
-        >
-          <option value="read">Read</option>
-          <option value="readWrite">Read and write</option>
-        </select>
-      </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="api-key-expires" className={FIELD_LABEL}>
-          Expires
-        </label>
-        <input
-          id="api-key-expires"
-          name="expiresAt"
-          type="date"
-          value={fields.expiresAt}
-          onChange={(event) => onFieldsChange({ ...fields, expiresAt: event.target.value })}
-          className={FIELD_INPUT}
-        />
-        <span className="text-[12.5px] text-muted">Leave empty for a key that does not expire.</span>
-      </p>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4">
+        <p className="flex flex-col gap-1">
+          <label htmlFor="api-key-name" className={FIELD_LABEL}>
+            Name
+          </label>
+          <input
+            id="api-key-name"
+            name="name"
+            required
+            maxLength={100}
+            value={fields.name}
+            onChange={(event) => onFieldsChange({ ...fields, name: event.target.value })}
+            className={FIELD_INPUT}
+          />
+        </p>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="api-key-scope" className={FIELD_LABEL}>
+            Scope
+          </label>
+          <select
+            id="api-key-scope"
+            name="scope"
+            value={fields.scope}
+            onChange={(event) => onFieldsChange({ ...fields, scope: event.target.value as ApiKeyScope })}
+            className={FIELD_INPUT}
+          >
+            <option value="read">Read</option>
+            <option value="readWrite">Read and write</option>
+          </select>
+        </p>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="api-key-expires" className={FIELD_LABEL}>
+            Expires
+          </label>
+          <input
+            id="api-key-expires"
+            name="expiresAt"
+            type="date"
+            value={fields.expiresAt}
+            onChange={(event) => onFieldsChange({ ...fields, expiresAt: event.target.value })}
+            className={FIELD_INPUT}
+          />
+        </p>
+      </div>
       {createApiKey.isError ? (
         <p role="alert" className={ALERT}>
           {problemDetail(createApiKey.error) ?? 'Could not mint the key. Try again.'}
         </p>
       ) : null}
-      <p>
+      <p className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={createApiKey.isPending} className={BUTTON_PRIMARY}>
           Create key
         </button>
+        <span className="text-[13px] text-muted">
+          Leave Expires empty for a key that does not expire. The key is shown once, at the top of this page.
+        </span>
       </p>
     </form>
   )
-}
-
-function describe(key: ApiKey): string {
-  const parts = [`Created ${key.createdAt}`]
-
-  parts.push(key.lastUsedAt === null ? 'Never used' : `Last used ${key.lastUsedAt}`)
-
-  if (key.expiresAt !== null) {
-    parts.push(key.isExpired ? `Expired ${key.expiresAt}` : `Expires ${key.expiresAt}`)
-  }
-
-  if (key.revokedAt !== null) {
-    parts.push(`Revoked ${key.revokedAt}`)
-  }
-
-  if (key.reporterName !== null) {
-    parts.push(`Paired with the reporter ${key.reporterName}`)
-  }
-
-  return parts.join(' · ')
 }

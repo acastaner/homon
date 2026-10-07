@@ -49,8 +49,9 @@ describe('AdminApiKeysPage', () => {
 
     await waitFor(() => expect(screen.getByText('clockmaster restic')).toBeInTheDocument())
 
-    // Scoped to the list: the form's own scope <select> offers the same words.
-    const list = within(screen.getByRole('list', { name: 'API keys' }))
+    // Scoped to the list: the form's own scope <select> offers the same words. The fixture's
+    // readWrite key is reporter-paired, so it sits under "Reporter keys" (plan 025's D12).
+    const list = within(screen.getByRole('list', { name: 'Reporter keys' }))
     expect(list.getByText('Read and write')).toBeInTheDocument()
     expect(screen.getByText(/Paired with the reporter clockmaster backup/)).toBeInTheDocument()
     expect(screen.getByText(/Never used/)).toBeInTheDocument()
