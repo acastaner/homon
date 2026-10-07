@@ -13,6 +13,12 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
+**024 is merged.** `main` carries one commit, `9adce5f`, fast-forwarded from `be1fbd4` on 2026-10-07 on
+the maintainer's word after a manual check in a browser on the branch. `/admin/probes` now lists probes in
+the dashboard's sections and order, and moving a grouped probe reorders its group rather than
+`Probe.Position` (which the dashboard reads only for the ungrouped section). Suites on the branch: `web` →
+203 tests (191 before), `e2e` → 125 at both viewport projects; no C# changed. Not yet in a release.
+
 **023 is merged.** `main` carries its eleven commits, `67469f6`…`60c1d16`, fast-forwarded from
 `fa5b2bd` on 2026-10-07 on the maintainer's word after a browser check on the branch, and released as
 `v0.5.0` the same day. Every probe now has a page at `/probes/{id}`, reached from its name on the
@@ -152,7 +158,7 @@ reviews and merges the work.
 | 021 | DONE (2026-10-05, `f68ce63`, released `v0.3.0`) | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
 | 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
-| 024 | in review (`plan/024-probes-admin-sections`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
+| 024 | DONE (2026-10-07, `9adce5f`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are

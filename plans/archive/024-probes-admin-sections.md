@@ -1,6 +1,6 @@
 # 024 — The probe admin page lists probes the way the dashboard does
 
-Status: in review on `plan/024-probes-admin-sections` (2026-10-07). Size S. Builds on 002, 012, 023.
+Status: DONE — merged to `main` as `9adce5f` (2026-10-07). Size S. Builds on 002, 012, 023.
 
 ## Why
 
