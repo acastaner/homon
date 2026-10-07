@@ -14,7 +14,8 @@ at execution time (see `archive/README.md`), because a plan is a record and rewr
 it a worse one.
 
 **025 is merged.** `main` carries its twelve commits, `ea79e11`…`1202c67`, fast-forwarded from `fd3f598` on
-2026-10-07 on the maintainer's word after a manual check in a browser on the branch. Every admin page now follows
+2026-10-07 on the maintainer's word after a manual check in a browser on the branch, and released as `v0.7.0`
+the same day. Every admin page now follows
 the Probes page's look, from one set of primitives under `src/Homon.Web/src/components/` (`docs/ARCHITECTURE.md`
 §3.30); the design is the canvas "Homon Admin pages", <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>, and
 where it disagrees with the plan the plan's D1–D16 won. It was the first plan executed by a dispatched agent in this
@@ -169,7 +170,7 @@ reviews and merges the work.
 | 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
-| 025 | DONE (2026-10-07, `1202c67`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
+| 025 | DONE (2026-10-07, `1202c67`, released `v0.7.0`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
