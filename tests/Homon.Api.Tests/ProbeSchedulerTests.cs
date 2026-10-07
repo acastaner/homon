@@ -1,3 +1,4 @@
+using Homon.Domain.Alerts;
 using Homon.Domain.Monitoring;
 using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Persistence;
@@ -188,8 +189,63 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
         Assert.Equal(0, await database.ProbeObservations.CountAsync(o => o.ProbeId == probe.Id));
     }
 
+    [DatabaseFact]
+    public async Task Going_down_writes_one_pending_outbox_row_in_the_same_save()
+    {
+        var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero, failureThreshold: 1);
+        var runner = new FakeProbeRunner((_, _) => Task.FromResult(new ProbeResult(false, null, "ping: TimedOut")));
+
+        var scheduler = BuildScheduler(runner, Epoch);
+        await scheduler.TickAsync(CancellationToken.None);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var rows = await database.AlertNotifications.Where(n => n.ProbeId == probe.Id).ToListAsync();
+        var row = Assert.Single(rows);
+        Assert.Equal(AlertKind.Down, row.Kind);
+        Assert.Equal(AlertDeliveryState.Pending, row.State);
+        Assert.Equal(probe.Name, row.ProbeName);
+        Assert.Equal("ping: TimedOut", row.Detail);
+        Assert.Equal(Epoch, row.DownSince);
+
+        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+        Assert.Equal(Epoch, reloaded.DownSince);
+    }
+
+    [DatabaseFact]
+    public async Task Coming_back_up_writes_a_second_row_that_remembers_when_the_outage_began()
+    {
+        var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero, failureThreshold: 1);
+        var clock = new FixedTimeProvider(Epoch);
+        var succeed = false;
+        var runner = new FakeProbeRunner((_, _) => Task.FromResult(
+            succeed ? new ProbeResult(true, 1.0, null) : new ProbeResult(false, null, "ping: TimedOut")));
+
+        var scheduler = BuildScheduler(runner, clock);
+        await scheduler.TickAsync(CancellationToken.None);
+
+        succeed = true;
+        clock.Advance(TimeSpan.FromMinutes(10));
+        await scheduler.TickAsync(CancellationToken.None);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        var rows = await database.AlertNotifications
+            .Where(n => n.ProbeId == probe.Id)
+            .OrderBy(n => n.Id)
+            .ToListAsync();
+        Assert.Equal([AlertKind.Down, AlertKind.Up], rows.Select(r => r.Kind));
+        Assert.Equal(Epoch, rows[1].DownSince);
+        Assert.Equal(Epoch.AddMinutes(10), rows[1].OccurredAt);
+
+        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+        Assert.Null(reloaded.DownSince);
+    }
+
     private async Task<Probe> SeedProbeAsync(
-        DateTimeOffset? lastObservedAt, bool isPaused = false, TimeSpan? pollInterval = null)
+        DateTimeOffset? lastObservedAt, bool isPaused = false, TimeSpan? pollInterval = null, int failureThreshold = 2)
     {
         using var scope = factory.Services.CreateScope();
         var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
@@ -201,7 +257,7 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
             Host = "probe.test",
             Kind = ProbeKind.Ping,
             PollInterval = pollInterval ?? TimeSpan.FromSeconds(60),
-            FailureThreshold = 2,
+            FailureThreshold = failureThreshold,
             IsPaused = isPaused,
             Status = isPaused ? ProbeStatus.Paused : ProbeStatus.Unknown,
             LastObservedAt = lastObservedAt,

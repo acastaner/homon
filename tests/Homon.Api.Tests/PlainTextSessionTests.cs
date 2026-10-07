@@ -75,9 +75,10 @@ public class PlainTextSessionTests
             builder.ConfigureAppConfiguration((_, configuration) =>
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // A Production host refuses to start without one rather than silently
-                    // logging alerts instead of sending them. Never used: nothing here sends.
-                    ["Email:ResendApiToken"] = "re_test_token",
+                    // HomonApiFactory sets Email:Transport to Log so the gate never mails
+                    // anyone, and a Production host refuses Log rather than silently logging
+                    // alerts instead of sending them. Never used: nothing here sends.
+                    ["Email:Transport"] = "Resend",
                 }));
         }
     }

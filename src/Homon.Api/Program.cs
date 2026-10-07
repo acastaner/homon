@@ -9,6 +9,7 @@ using Homon.Api.Configuration;
 using Homon.Api.Endpoints;
 using Homon.Infrastructure;
 using Homon.Infrastructure.Administration;
+using Homon.Infrastructure.Alerts;
 using Homon.Infrastructure.Identity;
 using Homon.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
@@ -207,6 +208,13 @@ builder.Services.AddOptions<FrontEndOptions>()
     .Bind(builder.Configuration.GetSection(FrontEndOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+
+// The links in alert email use the same browser-facing base URL. AlertOptions lives in
+// Infrastructure, which cannot see FrontEndOptions, so it is filled here — from the built
+// container's IOptions<FrontEndOptions>, so test overrides win (CLAUDE.md, "Configuration read
+// before builder.Build()").
+builder.Services.AddOptions<AlertOptions>()
+    .Configure<IOptions<FrontEndOptions>>((alerts, frontEnd) => alerts.PublicBaseUrl = frontEnd.Value.PublicBaseUrl);
 
 builder.Services.AddOptions<AuthOptions>()
     .Bind(builder.Configuration.GetSection(AuthOptions.SectionName))
@@ -543,6 +551,8 @@ v1.MapReporterEndpoints();
 v1.MapMessageEndpoints();
 v1.MapApiKeyEndpoints();
 v1.MapWeatherEndpoints();
+// Alerts are cross-cutting (docs/MODULES.md), not one of the per-module rows — plan 026.
+v1.MapAlertEndpoints();
 //   v1.MapCalendarEndpoints();
 
 using (var startup = app.Services.CreateScope())

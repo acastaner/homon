@@ -4,8 +4,8 @@ namespace Homon.Infrastructure.Email;
 
 /// <summary>
 /// Development stand-in for <see cref="IAlertEmailSender"/>: writes the message to the log
-/// instead of sending mail. Registered whenever no Resend API token is configured, so a
-/// development machine cannot mail real people by accident.
+/// instead of sending mail. Registered when <c>Email:Transport</c> is <c>Log</c> — the setting the
+/// gate uses so it can never mail real people (plan 026, Decision 4).
 /// </summary>
 /// <remarks>
 /// The recipients and subject are logged at <see cref="LogLevel.Warning"/> so the fact
@@ -30,7 +30,7 @@ public sealed partial class LoggingEmailSender(ILogger<LoggingEmailSender> logge
     [LoggerMessage(
         EventId = 1000,
         Level = LogLevel.Warning,
-        Message = "Email not sent (no Resend token configured). To {Recipients}: {Subject}")]
+        Message = "Email not sent (Email:Transport is Log). To {Recipients}: {Subject}")]
     private static partial void LogNotSent(ILogger logger, string recipients, string subject);
 
     [LoggerMessage(

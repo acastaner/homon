@@ -1,5 +1,6 @@
 using System.Net.Security;
 using Homon.Infrastructure.Administration;
+using Homon.Infrastructure.Alerts;
 using Homon.Infrastructure.Email;
 using Homon.Infrastructure.Messaging;
 using Homon.Infrastructure.Monitoring;
@@ -14,7 +15,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using Resend;
 
 namespace Homon.Infrastructure;
 
@@ -47,6 +47,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddHomonDatabase();
         services.AddHomonEmail(configuration, isProduction);
+        services.AddHomonAlerts(configuration);
         services.AddAdministrator(configuration);
         services.AddHomonMonitoring(configuration);
         services.AddHomonMessaging(configuration);
@@ -88,12 +89,10 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddOptions<EmailOptions>()
             .Bind(configuration.GetSection(EmailOptions.SectionName))
-            .ValidateDataAnnotations()
             .Validate(
-                options => options.IsResendConfigured || !isProduction,
-                "Email:ResendApiToken is not configured. A Production host will not silently "
-                + "log alerts instead of sending them — set the token, or run a non-Production "
-                + "environment.")
+                options => !isProduction || options.Transport == EmailTransport.Resend,
+                "Email:Transport is Log. A Production host will not silently log alerts instead "
+                + "of sending them — remove the setting, or run a non-Production environment.")
             .ValidateOnStart();
 
         // Both senders are registered; which one IAlertEmailSender resolves to is decided
@@ -102,14 +101,13 @@ public static class InfrastructureServiceCollectionExtensions
         // ConfigureAppConfiguration, and that override only lands on the built container's
         // IConfiguration after this method returns. Deciding the sender from a section read
         // right here would choose from whatever configuration existed *before* the override,
-        // which on a machine with a real Resend token in user secrets silently defeats a
-        // test's attempt to null it out. Same class of bug as the connection string above.
-        services.AddResend(_ => { });
-
-        services.AddOptions<ResendClientOptions>()
-            .Configure<IOptions<EmailOptions>>(
-                (resendOptions, emailOptions) =>
-                    resendOptions.ApiToken = emailOptions.Value.ResendApiToken ?? string.Empty);
+        // which on a machine whose user secrets say Email:Transport=Resend silently defeats a
+        // test's attempt to switch it to Log. Same class of bug as the connection string above.
+        //
+        // No typed-client registration from the Resend package: the Resend key is a database row the administrator can change between
+        // two sends, so ResendEmailSender builds its client per send (see its remarks) from a
+        // named HttpClient.
+        services.AddHttpClient(ResendEmailSender.HttpClientName);
 
         services.AddScoped<ResendEmailSender>();
         services.AddScoped<LoggingEmailSender>();
@@ -118,12 +116,21 @@ public static class InfrastructureServiceCollectionExtensions
         {
             var emailOptions = serviceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
 
-            // No token: log the message instead of sending. Keeps development machines from
-            // mailing real addresses.
-            return emailOptions.IsResendConfigured
-                ? serviceProvider.GetRequiredService<ResendEmailSender>()
-                : serviceProvider.GetRequiredService<LoggingEmailSender>();
+            // Transport Log: write the message to the log instead of sending. Keeps the gate and
+            // development machines from mailing real addresses; Production refuses it above.
+            return emailOptions.Transport == EmailTransport.Log
+                ? serviceProvider.GetRequiredService<LoggingEmailSender>()
+                : serviceProvider.GetRequiredService<ResendEmailSender>();
         });
+    }
+
+    private static void AddHomonAlerts(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<AlertOptions>()
+            .Bind(configuration.GetSection(AlertOptions.SectionName))
+            .ValidateOnStart();
+
+        services.AddHostedService<AlertDispatcher>();
     }
 
     private static void AddAdministrator(

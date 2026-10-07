@@ -1,7 +1,8 @@
 namespace Homon.Infrastructure.Security;
 
 /// <summary>
-/// Encrypts and decrypts every secret a probe carries (SMB password, HTTP bearer token) —
+/// Encrypts and decrypts every secret Homon stores: a probe's credentials (SMB password, HTTP
+/// bearer token) and the Resend API key (plan 026) —
 /// one abstraction for every kind, so 004 (SMB) and 011 (calendar credentials) reuse this
 /// instead of inventing their own. See plan 003's Decision 2.
 /// </summary>

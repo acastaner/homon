@@ -3,15 +3,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 
 namespace Homon.Api.Tests;
 
 public class EmailTransportTests
 {
     [Fact]
-    public void Without_a_token_the_logging_sender_is_resolved()
+    public void The_test_host_logs_instead_of_sending()
     {
+        // HomonApiFactory sets Email:Transport to Log: the gate never mails anyone.
         using var factory = new HomonApiFactory();
         using var scope = factory.Services.CreateScope();
 
@@ -19,22 +19,33 @@ public class EmailTransportTests
     }
 
     [Fact]
-    public void With_a_token_the_resend_sender_is_resolved()
+    public void By_default_the_resend_sender_is_resolved()
     {
-        using var factory = new ConfiguredFactory(Environments.Development, "re_test_token");
+        // Resend is the default, so a host that says nothing sends for real — which is why the
+        // test factory has to say Log, and why this test has to ask for Resend explicitly.
+        using var factory = new ConfiguredFactory(Environments.Development, "Resend");
         using var scope = factory.Services.CreateScope();
 
         Assert.IsType<ResendEmailSender>(scope.ServiceProvider.GetRequiredService<IAlertEmailSender>());
     }
 
     [Fact]
-    public void A_production_host_refuses_to_start_without_a_token()
+    public void With_the_log_transport_the_logging_sender_is_resolved()
     {
-        using var factory = new ConfiguredFactory(Environments.Production, null);
+        using var factory = new ConfiguredFactory(Environments.Development, "Log");
+        using var scope = factory.Services.CreateScope();
+
+        Assert.IsType<LoggingEmailSender>(scope.ServiceProvider.GetRequiredService<IAlertEmailSender>());
+    }
+
+    [Fact]
+    public void A_production_host_refuses_to_start_with_the_log_transport()
+    {
+        using var factory = new ConfiguredFactory(Environments.Production, "Log");
 
         var exception = Assert.ThrowsAny<Exception>(() => factory.Services);
 
-        Assert.Contains("Email:ResendApiToken is not configured", Flatten(exception), StringComparison.Ordinal);
+        Assert.Contains("Email:Transport is Log", Flatten(exception), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,18 +56,6 @@ public class EmailTransportTests
         var exception = Assert.ThrowsAny<Exception>(() => factory.Services);
 
         Assert.Contains("must be set together", Flatten(exception), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Alert_recipients_bind_as_a_list()
-    {
-        using var factory = new HomonApiFactory();
-        using var scope = factory.Services.CreateScope();
-
-        var options = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
-
-        Assert.Empty(options.AlertRecipients);
-        Assert.Equal("Homon", options.FromName);
     }
 
     private static string Flatten(Exception exception)
@@ -71,7 +70,7 @@ public class EmailTransportTests
         return string.Join(" | ", messages);
     }
 
-    private sealed class ConfiguredFactory(string environment, string? token) : HomonApiFactory
+    private sealed class ConfiguredFactory(string environment, string transport) : HomonApiFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -82,7 +81,7 @@ public class EmailTransportTests
             builder.ConfigureAppConfiguration((_, configuration) =>
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Email:ResendApiToken"] = token,
+                    ["Email:Transport"] = transport,
                 }));
         }
     }

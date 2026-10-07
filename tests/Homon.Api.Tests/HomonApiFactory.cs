@@ -43,7 +43,12 @@ public class HomonApiFactory : WebApplicationFactory<Program>
                 ["Administrator:Email"] = AdministratorEmail,
                 ["Administrator:PasswordHash"] =
                     AdministratorAuthenticator.HashPassword(AdministratorPassword),
-                ["Email:ResendApiToken"] = null,
+
+                // The gate must never mail anyone: a Resend key saved by a test into a
+                // [DatabaseFact] database would otherwise really send (plan 026, Decision 4).
+                // Replaces the old "no token configured" guard. EmailTransportTests overrides it
+                // where it needs the real sender.
+                ["Email:Transport"] = "Log",
 
                 // Raised well clear of the suite's own attempt count so unrelated tests
                 // cannot exhaust the window and make each other flaky. SignInThrottleTests
@@ -65,6 +70,10 @@ public class HomonApiFactory : WebApplicationFactory<Program>
 
                 // Plan 021's message sweep, for exactly the same reason.
                 ["Messaging:RetentionEnabled"] = "false",
+
+                // Plan 026's alert dispatcher, for the same reason as the scheduler keys above:
+                // AlertDispatcherTests construct it by hand and call DispatchOnceAsync.
+                ["Alerts:DispatcherEnabled"] = "false",
             }));
     }
 }

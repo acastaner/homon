@@ -14,10 +14,18 @@ public sealed class RecordingEmailSender : IAlertEmailSender
 
     public IReadOnlyCollection<EmailMessage> Sent => _sent;
 
+    /// <summary>When set, <see cref="SendAsync"/> throws it instead of recording — a failing transport.</summary>
+    public Exception? ThrowOnSend { get; set; }
+
     public void Clear() => _sent.Clear();
 
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnSend is { } failure)
+        {
+            throw failure;
+        }
+
         _sent.Enqueue(message);
         return Task.CompletedTask;
     }
