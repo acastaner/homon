@@ -13,6 +13,28 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
+**023 is merged.** `main` carries its eleven commits, `67469f6`…`60c1d16`, fast-forwarded from
+`fa5b2bd` on 2026-10-07 on the maintainer's word after a browser check on the branch, and released as
+`v0.5.0` the same day. Every probe now has a page at `/probes/{id}`, reached from its name on the
+dashboard: readers get the state, uptime, a 24 h / 7 d / 30 d latency graph and the 50 most recent
+polls from a new Reader-gated `GET /status/probes/{id}` that never carries the host; administrators
+also get the configuration, from the unchanged `GET /probes/{id}` (`docs/ARCHITECTURE.md` §3.29).
+The reviewer re-ran the suites one at a time on the branch: `web` → 191 tests (168 before), `api` →
+465 passed with 0 skips (455 before), `e2e` → 125 at both viewport projects (113 before).
+
+**The first approval of 023 was wrong, and the gates could not have said so.** All three suites were
+green and the review approved it; the maintainer then opened a real probe page with three polls in
+a day and saw three tiny dashes in a 0–500 ms frame. The defect was in the plan's D8, not in the
+execution: a stretched viewBox that forbade dots and in-SVG text, a line that broke at every bucket
+nobody polled, and a ceiling that wasted half the height. e2e can seed no observations, so no test
+ever drew data. D8′ redrew it in real pixels with dashed bridges over unpolled time, dots for sparse
+samples, a tighter ceiling and a hover readout, and the reviewer then rendered the real component
+in Chromium against realistic data before approving again — which is how a second defect (a chart
+that mounted empty never measured itself and stayed 720px wide) was found and fixed. The lesson
+worth keeping: *for anything visual, render it with realistic data before calling it done; a green
+gate over an empty state proves the empty state.* The plan records three revisions in place; the
+maintainer authorised a third revision round beyond the usual two.
+
 **022 is merged.** `main` carries its four commits, `54dc488`…`14af996`, fast-forwarded from
 `9c94ba0` on 2026-10-06 on the maintainer's word, after a visual check in a browser on the branch,
 and released as `v0.4.0` the same day — the release workflow passed and it is deployed.
@@ -129,6 +151,7 @@ reviews and merges the work.
 | 020 | DONE (2026-10-01, `ca2a89b`, released `v0.2.0`) | L | — (builds on 010, 012) | Today's extremes in the weather widget; a full `/weather` page with hourly and 7-day tables and derived severe-weather banners |
 | 021 | DONE (2026-10-05, `f68ce63`, released `v0.3.0`) | XL | — (builds on 002, 003, 012, 013) | Message gateway: push-report ingestion, reporters, the `message` probe kind, 32-day retention and API-key administration — supersedes 008 |
 | 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
+| 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
@@ -205,6 +228,11 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
 
 ## Dependency notes
 
+- **023 adds a second latency allow-list consumer.** It extracts `StatusEndpoints.PlotsLatency`
+  and `lib/status.ts plotsLatency` (one per side) and uses them for both the sparkline and the
+  probe page, so 004 and 005 opt a kind in by changing those two lines. Its reader endpoint
+  (`GET /status/probes/{id}`) deliberately never carries `Host`. The configuration block reuses
+  the admin-only `GET /probes/{id}`, whose policy 023 leaves alone (plan 002's Decision 8).
 - **013 runs before 002.** 002's `GET /probes` uses `HomonPolicies.AdministratorOrApiKey`
   (admin session or any unexpired API key of either scope; probe writes stay admin-only),
   and 013 registers the shared `TimeProvider`. 013 claims `docs/ARCHITECTURE.md` §3.13;
