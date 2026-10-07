@@ -1,8 +1,19 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
+import { ChevronDown, ChevronUp, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 
+import { StatusChip } from '@/components/status-chip'
 import { problemDetail } from '@/lib/api'
-import { type ProbeGroup, useProbeGroups } from '@/lib/probe-groups'
+import { formatDuration } from '@/lib/probe-detail'
+import { type ProbeGroup, useProbeGroups, useSetProbeGroupMembers } from '@/lib/probe-groups'
+import {
+  moveWithinSection,
+  PROBE_KIND_SHORT,
+  probeSections,
+  probeTarget,
+  type ProbeSection,
+  type ProbeSectionRow,
+} from '@/lib/probe-sections'
 import {
   useCreateProbe,
   useDeleteProbe,
@@ -20,22 +31,44 @@ import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 /** Every kind the create form offers today — `smb`/`snmp` arrive with plans 004/005. */
 const CREATABLE_KINDS: readonly ('ping' | 'http' | 'message')[] = ['ping', 'http', 'message']
 
-const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
 const FIELD_LABEL = 'text-[13px] font-medium text-text'
 const FIELD_INPUT =
   'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
 const BUTTON_SECONDARY =
-  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
+  'inline-flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
 const BUTTON_PRIMARY =
-  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+  'inline-flex h-10 items-center justify-center gap-2 rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
+const BUTTON_DANGER =
+  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
 const FIELDSET = 'flex flex-col gap-4 rounded-md border border-line p-4'
 const LEGEND = 'px-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted'
 const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
 
+/*
+ * Row actions are icon-only, 40px square — the floor `e2e/layout.spec.ts`'s "admin row-action
+ * buttons are tappable" holds every admin button to, which is why they are not the 32px the
+ * design canvas drew. Quiet at rest (no border) so five of them per row read as one control
+ * strip rather than five buttons; the probe's name is in every aria-label, so a screen reader
+ * (and every test that queries "Move NAS up") still hears which probe a button acts on.
+ */
+const ICON_BUTTON =
+  'inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-transparent text-muted hover:border-line-strong hover:bg-bg hover:text-text aria-expanded:border-line-strong aria-expanded:bg-bg aria-expanded:text-text disabled:pointer-events-none disabled:opacity-30'
+const ICON_BUTTON_DANGER = `${ICON_BUTTON} hover:border-down hover:bg-down-bg hover:text-down aria-expanded:border-down aria-expanded:bg-down-bg aria-expanded:text-down`
+
+/*
+ * One grid per row, so every row and the header must share exactly this template or the columns
+ * stop lining up — hence the fixed 216px action column (five 40px buttons and a divider) rather
+ * than `auto`. Below `lg` a row folds instead: position, name and status on the first line, kind,
+ * target and interval on the second, actions on the third, as the canvas's 412px artboard draws
+ * it. A table at that width would need a sideways scroll for every row.
+ */
+const ROW_GRID =
+  'grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[28px_116px_minmax(0,1.15fr)_72px_minmax(0,1.5fr)_64px_216px] lg:gap-x-3.5'
+
 /**
- * The probe admin page: an ordered list of existing probes with move/edit/pause/delete
- * actions, and a form beneath it that both adds a new probe and edits whichever one is
- * currently selected.
+ * The probe admin page: every probe, sectioned and ordered exactly as the dashboard lays them out
+ * by default (`probeSections`), each row with move / edit / pause / delete. Edit opens the form
+ * inside the row; the add form waits at the bottom.
  */
 export function AdminProbesPage() {
   useDocumentTitle(pageTitle('Probes', 'Admin'))
@@ -43,117 +76,405 @@ export function AdminProbesPage() {
   const probes = useProbes()
   const groups = useProbeGroups()
   const reorder = useReorderProbes()
-  const setPaused = useSetProbePaused()
-  const deleteProbe = useDeleteProbe()
+  const setMembers = useSetProbeGroupMembers()
 
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
+  // Keyed by section AND probe: a probe in two groups is two rows, and only the one whose
+  // button was pressed opens.
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null)
 
-  const orderedProbes = probes.data ?? []
-  const editingProbe = orderedProbes.find((probe) => probe.id === editingId) ?? null
+  const allProbes = probes.data ?? []
+  const allGroups = groups.data ?? []
+  const sections = probeSections(allProbes, allGroups)
+  const isEditingARow = sections.some((section) =>
+    section.rows.some((row) => rowKey(section, row) === editingKey),
+  )
 
-  function move(id: string, direction: -1 | 1) {
-    const ids = orderedProbes.map((probe) => probe.id)
-    const index = ids.indexOf(id)
-    const swapWith = index + direction
+  function move(section: ProbeSection, probeId: string, direction: -1 | 1) {
+    const sectionIds = section.rows.map((row) => row.probe.id)
 
-    if (swapWith < 0 || swapWith >= ids.length) {
+    if (section.kind === 'group') {
+      const next = moveWithinSection(sectionIds, sectionIds, probeId, direction)
+
+      if (next !== null) {
+        setMembers.mutate({ id: section.id, probeIds: next })
+      }
+
       return
     }
 
-    const next = [...ids]
-    ;[next[index], next[swapWith]] = [next[swapWith], next[index]]
-    reorder.mutate(next)
+    const next = moveWithinSection(
+      allProbes.map((probe) => probe.id),
+      sectionIds,
+      probeId,
+      direction,
+    )
+
+    if (next !== null) {
+      reorder.mutate(next)
+    }
   }
 
   return (
     <>
-      <h1 className={PAGE_H1}>Probes</h1>
-      {orderedProbes.length === 0 ? (
+      <div className="flex flex-col gap-4 border-b border-line-strong pb-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">Probes</h1>
+          <p className="max-w-[680px] text-[14px] text-muted">
+            Listed the way the dashboard lays them out: each group in its own order, then every probe not in a
+            group. A probe in two groups appears in both, and can sit at a different place in each.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="mono text-[13px] text-muted">
+            {countOf(allProbes.length, 'probe')} · {countOf(allGroups.length, 'group')}
+          </span>
+          <Link to="/admin/probe-groups" className={BUTTON_SECONDARY}>
+            Manage groups
+          </Link>
+          {isEditingARow ? null : (
+            <button type="button" onClick={jumpToAddForm} className={BUTTON_PRIMARY}>
+              <Plus aria-hidden="true" size={16} strokeWidth={2.25} />
+              New probe
+            </button>
+          )}
+        </div>
+      </div>
+      {sections.length === 0 ? (
         <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
           No probes yet. Add one below.
         </p>
       ) : (
-        <ol aria-label="Probes" className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4">
-          {orderedProbes.map((probe, index) => (
-            <li key={probe.id} className="flex flex-col gap-2 py-3">
-              <p className="text-[15px]">
-                <strong className="font-semibold">{probe.name}</strong>{' '}
-                <span className="text-muted">
-                  — {probe.status}
-                  {probe.lastDetail ? ` (${probe.lastDetail})` : null}
-                </span>
-              </p>
-              <p className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => move(probe.id, -1)} disabled={index === 0} className={BUTTON_SECONDARY}>
-                  Move {probe.name} up
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(probe.id, 1)}
-                  disabled={index === orderedProbes.length - 1}
-                  className={BUTTON_SECONDARY}
-                >
-                  Move {probe.name} down
-                </button>
-                <button type="button" onClick={() => setEditingId(probe.id)} className={BUTTON_SECONDARY}>
-                  Edit {probe.name}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaused.mutate({ id: probe.id, isPaused: !probe.isPaused })}
-                  disabled={setPaused.isPending}
-                  className={BUTTON_SECONDARY}
-                >
-                  {probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
-                </button>
-                {confirmingDeleteId === probe.id ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteProbe.mutate(probe.id, { onSuccess: () => setConfirmingDeleteId(null) })
-                      }
-                      className="inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20"
-                    >
-                      Confirm delete {probe.name}
-                    </button>
-                    <button type="button" onClick={() => setConfirmingDeleteId(null)} className={BUTTON_SECONDARY}>
-                      Cancel delete {probe.name}
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" onClick={() => setConfirmingDeleteId(probe.id)} className={BUTTON_SECONDARY}>
-                    Delete {probe.name}
-                  </button>
-                )}
-              </p>
-            </li>
-          ))}
-        </ol>
+        sections.map((section) => (
+          <ProbeSectionPanel
+            key={section.id}
+            section={section}
+            editingKey={editingKey}
+            confirmingDeleteKey={confirmingDeleteKey}
+            groups={allGroups}
+            onMove={(probeId, direction) => move(section, probeId, direction)}
+            onEdit={(key) => {
+              setConfirmingDeleteKey(null)
+              setEditingKey((current) => (current === key ? null : key))
+            }}
+            onDoneEditing={() => setEditingKey(null)}
+            onAskDelete={(key) => {
+              setEditingKey(null)
+              setConfirmingDeleteKey((current) => (current === key ? null : key))
+            }}
+            onCancelDelete={() => setConfirmingDeleteKey(null)}
+          />
+        ))
       )}
-      <ProbeForm
-        key={editingId ?? 'new-probe'}
-        probe={editingProbe}
-        groups={groups.data ?? []}
-        onDoneEditing={() => setEditingId(null)}
-      />
+      {/*
+        Not rendered while a row is being edited: ProbeForm's inputs carry fixed ids, so two at
+        once would hand both "Name" labels to whichever input came first, and an add form below
+        an open editor is a second thing to type into that nobody asked for.
+      */}
+      {isEditingARow ? null : <ProbeForm key="new-probe" probe={null} groups={allGroups} variant="card" onDoneEditing={() => undefined} />}
     </>
   )
 }
 
+/** "New probe" in the header: the add form is at the bottom of what can be a long page. */
+function jumpToAddForm() {
+  const name = document.getElementById('probe-name')
+  name?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  name?.focus({ preventScroll: true })
+}
+
+function rowKey(section: ProbeSection, row: ProbeSectionRow): string {
+  return `${section.id}:${row.probe.id}`
+}
+
+function countOf(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? '' : 's'}`
+}
+
+function ProbeSectionPanel({
+  section,
+  editingKey,
+  confirmingDeleteKey,
+  groups,
+  onMove,
+  onEdit,
+  onDoneEditing,
+  onAskDelete,
+  onCancelDelete,
+}: {
+  section: ProbeSection
+  editingKey: string | null
+  confirmingDeleteKey: string | null
+  groups: ProbeGroup[]
+  onMove: (probeId: string, direction: -1 | 1) => void
+  onEdit: (key: string) => void
+  onDoneEditing: () => void
+  onAskDelete: (key: string) => void
+  onCancelDelete: () => void
+}) {
+  const headingId = `probe-section-${section.id}-heading`
+
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id={headingId} className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {section.heading}
+        </h2>
+        <span className="text-[12.5px] text-muted">
+          {section.kind === 'group' ? countOf(section.rows.length, 'probe') : 'Not in any group'}
+        </span>
+      </div>
+      {section.rows.length === 0 ? (
+        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
+          No probes in this group yet, so the dashboard leaves it out. Tick it under Groups when you add or edit a
+          probe.
+        </p>
+      ) : (
+        <div className="rounded-md border border-line bg-surface">
+          <div
+            aria-hidden="true"
+            className={`${ROW_GRID} hidden px-4 py-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted lg:grid`}
+          >
+            <span className="text-right">#</span>
+            <span>Status</span>
+            <span>Probe</span>
+            <span>Kind</span>
+            <span>Target</span>
+            <span className="text-right">Every</span>
+            <span className="text-right">Actions</span>
+          </div>
+          <ol className="flex list-none flex-col">
+            {section.rows.map((row, index) => {
+              const key = rowKey(section, row)
+
+              return (
+                <ProbeRow
+                  key={key}
+                  row={row}
+                  position={index + 1}
+                  isFirst={index === 0}
+                  isLast={index === section.rows.length - 1}
+                  isEditing={editingKey === key}
+                  isConfirmingDelete={confirmingDeleteKey === key}
+                  groups={groups}
+                  onMove={(direction) => onMove(row.probe.id, direction)}
+                  onEdit={() => onEdit(key)}
+                  onDoneEditing={onDoneEditing}
+                  onAskDelete={() => onAskDelete(key)}
+                  onCancelDelete={onCancelDelete}
+                />
+              )
+            })}
+          </ol>
+        </div>
+      )}
+    </section>
+  )
+}
+
+const ROW_TINT: Record<string, string> = {
+  down: 'row-tint-down',
+  unstable: 'row-tint-unstable',
+  paused: 'row-paused',
+}
+
+function ProbeRow({
+  row,
+  position,
+  isFirst,
+  isLast,
+  isEditing,
+  isConfirmingDelete,
+  groups,
+  onMove,
+  onEdit,
+  onDoneEditing,
+  onAskDelete,
+  onCancelDelete,
+}: {
+  row: ProbeSectionRow
+  position: number
+  isFirst: boolean
+  isLast: boolean
+  isEditing: boolean
+  isConfirmingDelete: boolean
+  groups: ProbeGroup[]
+  onMove: (direction: -1 | 1) => void
+  onEdit: () => void
+  onDoneEditing: () => void
+  onAskDelete: () => void
+  onCancelDelete: () => void
+}) {
+  const { probe, alsoIn } = row
+  const setPaused = useSetProbePaused()
+  const deleteProbe = useDeleteProbe()
+  const state = probe.isPaused ? 'paused' : probe.status
+  const editorId = `probe-editor-${probe.id}`
+  const confirmId = `probe-confirm-delete-${probe.id}`
+
+  return (
+    <li className="border-t border-line first:border-t-0">
+      <div className={`${ROW_GRID} px-3.5 py-3 lg:min-h-12 lg:px-4 lg:py-1 ${isEditing ? 'bg-bg' : (ROW_TINT[state] ?? '')}`}>
+        <span className="mono col-start-1 row-start-1 text-right text-[13px] text-muted lg:col-start-auto lg:row-start-auto">
+          {String(position).padStart(2, '0')}
+        </span>
+        <span className="col-start-3 row-start-1 flex lg:col-start-auto lg:row-start-auto">
+          <StatusChip state={state} />
+        </span>
+        <span className="col-start-2 row-start-1 flex min-w-0 items-baseline gap-2 lg:col-start-auto lg:row-start-auto">
+          <Link
+            to={`/probes/${probe.id}`}
+            className={`truncate text-[15px] font-semibold no-underline hover:underline ${state === 'paused' ? 'text-muted' : 'text-text'}`}
+          >
+            {probe.name}
+          </Link>
+          {alsoIn.length > 0 ? (
+            <span className="shrink-0 rounded-full border border-line-strong px-2 text-[12px] text-muted">
+              also in {alsoIn.join(', ')}
+            </span>
+          ) : null}
+        </span>
+        {/* One line under the name below lg; three cells of the grid at lg (`contents`). */}
+        <span className="col-span-2 col-start-2 flex min-w-0 gap-1.5 text-[13px] text-muted lg:contents">
+          <span>{PROBE_KIND_SHORT[probe.kind]}</span>
+          <span aria-hidden="true" className="lg:hidden">
+            ·
+          </span>
+          <span className="mono min-w-0 truncate" title={probeTarget(probe)}>
+            {probeTarget(probe)}
+          </span>
+          <span aria-hidden="true" className="lg:hidden">
+            ·
+          </span>
+          <span className="mono shrink-0 lg:text-right">{formatDuration(probe.pollIntervalSeconds)}</span>
+        </span>
+        <span className="col-span-3 flex items-center justify-end lg:col-span-1">
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={isFirst}
+            aria-label={`Move ${probe.name} up`}
+            title="Move up"
+            className={ICON_BUTTON}
+          >
+            <ChevronUp aria-hidden="true" size={18} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={isLast}
+            aria-label={`Move ${probe.name} down`}
+            title="Move down"
+            className={ICON_BUTTON}
+          >
+            <ChevronDown aria-hidden="true" size={18} strokeWidth={2} />
+          </button>
+          <span aria-hidden="true" className="mx-1.5 h-5 w-px bg-line" />
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${probe.name}`}
+            aria-expanded={isEditing}
+            aria-controls={isEditing ? editorId : undefined}
+            title="Edit"
+            className={ICON_BUTTON}
+          >
+            <Pencil aria-hidden="true" size={16} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaused.mutate({ id: probe.id, isPaused: !probe.isPaused })}
+            disabled={setPaused.isPending}
+            aria-label={probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
+            title={probe.isPaused ? 'Unpause' : 'Pause'}
+            className={ICON_BUTTON}
+          >
+            {probe.isPaused ? (
+              <Play aria-hidden="true" size={16} strokeWidth={2} />
+            ) : (
+              <Pause aria-hidden="true" size={16} strokeWidth={2} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onAskDelete}
+            aria-label={`Delete ${probe.name}`}
+            aria-expanded={isConfirmingDelete}
+            aria-controls={isConfirmingDelete ? confirmId : undefined}
+            title="Delete"
+            className={ICON_BUTTON_DANGER}
+          >
+            <Trash2 aria-hidden="true" size={16} strokeWidth={2} />
+          </button>
+        </span>
+      </div>
+      {/*
+        A strip under the row rather than buttons swapped into the action cell: the cell is a fixed
+        216px so the columns line up, and the question needs room to say that a probe in several
+        groups leaves all of them — deleting from one section is not "remove from this group".
+      */}
+      {isConfirmingDelete ? (
+        <div
+          id={confirmId}
+          className="flex flex-wrap items-center justify-end gap-2 border-t border-down/40 bg-down-bg px-4 py-2.5"
+        >
+          <p className="mr-auto text-[13.5px] font-medium text-down">
+            {alsoIn.length > 0
+              ? `Delete ${probe.name}? It also leaves ${alsoIn.join(', ')}.`
+              : `Delete ${probe.name}?`}
+          </p>
+          <button
+            type="button"
+            onClick={() => deleteProbe.mutate(probe.id, { onSuccess: onCancelDelete })}
+            disabled={deleteProbe.isPending}
+            aria-label={`Confirm delete ${probe.name}`}
+            className={BUTTON_DANGER}
+          >
+            Delete
+          </button>
+          <button type="button" onClick={onCancelDelete} aria-label={`Cancel delete ${probe.name}`} className={BUTTON_SECONDARY}>
+            Cancel
+          </button>
+        </div>
+      ) : null}
+      {isEditing ? (
+        <div id={editorId}>
+          <ProbeForm probe={probe} groups={groups} variant="inline" onDoneEditing={onDoneEditing} />
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+
+/**
+ * Adds a probe (`variant="card"`, the panel at the bottom of the page) or edits one
+ * (`variant="inline"`, opened inside that probe's row). Same fields either way; the inline one
+ * drops the panel chrome and takes focus, since the button that opened it is right above.
+ */
 function ProbeForm({
   probe,
   groups,
+  variant,
   onDoneEditing,
 }: {
   probe: Probe | null
   groups: ProbeGroup[]
+  variant: 'card' | 'inline'
   onDoneEditing: () => void
 }) {
   const createProbe = useCreateProbe()
   const updateProbe = useUpdateProbe()
   const isEditing = probe !== null
+  const isInline = variant === 'inline'
+  const Heading = isInline ? 'h3' : 'h2'
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isInline) {
+      nameRef.current?.focus()
+    }
+  }, [isInline])
 
   const [name, setName] = useState(probe?.name ?? '')
   const [host, setHost] = useState(probe?.host ?? '')
@@ -298,138 +619,151 @@ function ProbeForm({
     <form
       onSubmit={onSubmit}
       aria-labelledby="probe-form-heading"
-      className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5"
+      className={
+        isInline
+          ? 'flex flex-col gap-4 border-t border-line bg-bg px-3.5 pt-4 pb-5 lg:pr-4 lg:pl-[58px]'
+          : 'flex flex-col gap-4 rounded-md border border-line bg-surface p-5'
+      }
     >
-      <h2 id="probe-form-heading" className="text-[15px] font-semibold">
+      <Heading id="probe-form-heading" className={isInline ? 'text-[14px] font-semibold' : 'text-[15px] font-semibold'}>
         {isEditing ? `Edit ${probe.name}` : 'Add a probe'}
-      </h2>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="probe-name" className={FIELD_LABEL}>
-          Name
-        </label>
-        <input
-          id="probe-name"
-          name="name"
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className={FIELD_INPUT}
-        />
-      </p>
+      </Heading>
+      {isEditing ? (
+        <p className="text-[14px] text-muted">Kind: {PROBE_KIND_LABEL[probe.kind]} — cannot be changed after creation.</p>
+      ) : null}
       {/*
-        A message probe adds no per-kind fieldset, unlike 003/004/005 — it has no options at all,
-        because what it watches is a reporter and when it next expects to hear from it is the
-        reporter's own business. What it replaces instead is this control: `Probe.Host` holds the
-        reporter's identifier (plan 021's Decision 3), which the API validates against an existing
-        reporter, so a free-text field here would be a way to typo a probe into permanent Unknown.
-        Any later kind whose host is a chosen thing rather than a typed one follows this shape.
+        As many 180px-or-wider columns as fit: the add form has five base fields and the editor
+        four (kind is fixed once created), so a fixed column count leaves one of them stranded on
+        a row of its own.
       */}
-      {isMessage ? (
-        reporters.data?.length ? (
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-4">
+        <p className="flex flex-col gap-1">
+          <label htmlFor="probe-name" className={FIELD_LABEL}>
+            Name
+          </label>
+          <input
+            ref={nameRef}
+            id="probe-name"
+            name="name"
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className={FIELD_INPUT}
+          />
+        </p>
+        {/*
+          A message probe adds no per-kind fieldset, unlike 003/004/005 — it has no options at all,
+          because what it watches is a reporter and when it next expects to hear from it is the
+          reporter's own business. What it replaces instead is this control: `Probe.Host` holds the
+          reporter's identifier (plan 021's Decision 3), which the API validates against an existing
+          reporter, so a free-text field here would be a way to typo a probe into permanent Unknown.
+          Any later kind whose host is a chosen thing rather than a typed one follows this shape.
+        */}
+        {isMessage ? (
+          reporters.data?.length ? (
+            <p className="flex flex-col gap-1">
+              <label htmlFor="probe-host" className={FIELD_LABEL}>
+                Reporter
+              </label>
+              <select
+                id="probe-host"
+                name="host"
+                required
+                value={host}
+                onChange={(event) => setHost(event.target.value)}
+                className={FIELD_INPUT}
+              >
+                <option value="">Choose a reporter</option>
+                {reporters.data.map((reporter) => (
+                  <option key={reporter.id} value={reporter.identifier}>
+                    {reporter.name}
+                  </option>
+                ))}
+              </select>
+            </p>
+          ) : (
+            <p className="text-[14px] text-muted">
+              No reporters yet.{' '}
+              <Link
+                to="/admin/reporters"
+                className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
+              >
+                Add a reporter
+              </Link>{' '}
+              before adding a message probe.
+            </p>
+          )
+        ) : (
           <p className="flex flex-col gap-1">
             <label htmlFor="probe-host" className={FIELD_LABEL}>
-              Reporter
+              Host
             </label>
-            <select
+            <input
               id="probe-host"
               name="host"
               required
               value={host}
               onChange={(event) => setHost(event.target.value)}
               className={FIELD_INPUT}
+            />
+          </p>
+        )}
+        {isEditing ? null : (
+          <p className="flex flex-col gap-1">
+            <label htmlFor="probe-kind" className={FIELD_LABEL}>
+              Kind
+            </label>
+            <select
+              id="probe-kind"
+              name="kind"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as 'ping' | 'http' | 'message')}
+              className={FIELD_INPUT}
             >
-              <option value="">Choose a reporter</option>
-              {reporters.data.map((reporter) => (
-                <option key={reporter.id} value={reporter.identifier}>
-                  {reporter.name}
+              {CREATABLE_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {PROBE_KIND_LABEL[option]}
                 </option>
               ))}
             </select>
           </p>
-        ) : (
-          <p className="text-[14px] text-muted">
-            No reporters yet.{' '}
-            <Link
-              to="/admin/reporters"
-              className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text"
-            >
-              Add a reporter
-            </Link>{' '}
-            before adding a message probe.
-          </p>
-        )
-      ) : (
+        )}
         <p className="flex flex-col gap-1">
-          <label htmlFor="probe-host" className={FIELD_LABEL}>
-            Host
+          <label htmlFor="probe-poll-interval" className={FIELD_LABEL}>
+            Poll interval (seconds)
           </label>
           <input
-            id="probe-host"
-            name="host"
+            id="probe-poll-interval"
+            name="pollIntervalSeconds"
+            type="number"
+            // Probe.MinPollIntervalSeconds / MaxPollIntervalSeconds — the API still validates;
+            // these only stop the browser submitting a value it would reject.
+            min={15}
+            max={86400}
             required
-            value={host}
-            onChange={(event) => setHost(event.target.value)}
+            value={pollIntervalSeconds}
+            onChange={(event) => setPollIntervalSeconds(Number(event.target.value))}
             className={FIELD_INPUT}
           />
         </p>
-      )}
-      {isEditing ? (
-        <p className="text-[14px] text-muted">Kind: {PROBE_KIND_LABEL[probe.kind]} — cannot be changed after creation.</p>
-      ) : (
         <p className="flex flex-col gap-1">
-          <label htmlFor="probe-kind" className={FIELD_LABEL}>
-            Kind
+          <label htmlFor="probe-failure-threshold" className={FIELD_LABEL}>
+            Failure threshold
           </label>
-          <select
-            id="probe-kind"
-            name="kind"
-            value={kind}
-            onChange={(event) => setKind(event.target.value as 'ping' | 'http' | 'message')}
+          <input
+            id="probe-failure-threshold"
+            name="failureThreshold"
+            type="number"
+            // Probe.MinFailureThreshold / MaxFailureThreshold.
+            min={1}
+            max={10}
+            required
+            value={failureThreshold}
+            onChange={(event) => setFailureThreshold(Number(event.target.value))}
             className={FIELD_INPUT}
-          >
-            {CREATABLE_KINDS.map((option) => (
-              <option key={option} value={option}>
-                {PROBE_KIND_LABEL[option]}
-              </option>
-            ))}
-          </select>
+          />
         </p>
-      )}
-      <p className="flex flex-col gap-1">
-        <label htmlFor="probe-poll-interval" className={FIELD_LABEL}>
-          Poll interval (seconds)
-        </label>
-        <input
-          id="probe-poll-interval"
-          name="pollIntervalSeconds"
-          type="number"
-          // Probe.MinPollIntervalSeconds / MaxPollIntervalSeconds — the API still validates;
-          // these only stop the browser submitting a value it would reject.
-          min={15}
-          max={86400}
-          required
-          value={pollIntervalSeconds}
-          onChange={(event) => setPollIntervalSeconds(Number(event.target.value))}
-          className={FIELD_INPUT}
-        />
-      </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="probe-failure-threshold" className={FIELD_LABEL}>
-          Failure threshold
-        </label>
-        <input
-          id="probe-failure-threshold"
-          name="failureThreshold"
-          type="number"
-          // Probe.MinFailureThreshold / MaxFailureThreshold.
-          min={1}
-          max={10}
-          required
-          value={failureThreshold}
-          onChange={(event) => setFailureThreshold(Number(event.target.value))}
-          className={FIELD_INPUT}
-        />
-      </p>
+      </div>
       {isHttp ? (
         // 004 (SMB) and 005 (SNMP) add a sibling fieldset here, keyed the same way, rather
         // than restructuring this block — see plan 003's Step 6 and its Maintenance notes.
@@ -623,19 +957,25 @@ function ProbeForm({
             No groups yet. <Link to="/admin/probe-groups" className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">Add one</Link>.
           </p>
         ) : (
-          groups.map((group) => (
-            <p key={group.id}>
-              <label className="flex items-center gap-2 text-[14px] text-text">
+          // Pills in a wrapping row rather than one checkbox per line: a household with six groups
+          // otherwise spends six lines of every editor on them. The whole pill is the label, so it
+          // is the 40px target, not the 16px box inside it.
+          <p className="flex flex-wrap gap-2">
+            {groups.map((group) => (
+              <label
+                key={group.id}
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-line px-3.5 text-[14px] text-text hover:border-line-strong has-checked:border-line-strong has-checked:bg-bg"
+              >
                 <input
                   type="checkbox"
                   checked={groupIds.includes(group.id)}
                   onChange={() => toggleGroup(group.id)}
-                  className="size-4 rounded border-line"
+                  className="size-4 rounded border-line accent-current"
                 />
                 {group.name}
               </label>
-            </p>
-          ))
+            ))}
+          </p>
         )}
       </fieldset>
       {mutation.isError ? <p role="alert" className={ALERT}>{problemDetail(mutation.error) ?? 'Could not save the probe. Try again.'}</p> : null}

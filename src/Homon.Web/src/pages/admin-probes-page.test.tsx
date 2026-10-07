@@ -185,7 +185,7 @@ describe('AdminProbesPage', () => {
 
     await user.type(screen.getByLabelText('Name'), '  NAS  ')
     await user.type(screen.getByLabelText('Host'), '  nas.local  ')
-    await user.click(screen.getByLabelText('Hosts'))
+    await user.click(screen.getByRole('checkbox', { name: 'Hosts' }))
     await user.click(screen.getByRole('button', { name: 'Add probe' }))
 
     await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/probes' && call.init?.method === 'POST')).toBe(true))
@@ -317,5 +317,97 @@ describe('AdminProbesPage', () => {
 
     await waitFor(() => expect(screen.getByRole('link', { name: 'Add a reporter' })).toBeInTheDocument())
     expect(screen.queryByRole('combobox', { name: 'Reporter' })).not.toBeInTheDocument()
+  })
+
+  describe('sections (plan 024)', () => {
+    const base = oneProbe['/api/v1/probes'].body[0]
+    const grouped = {
+      '/api/v1/probes': {
+        body: [
+          { ...base, id: 'nas', name: 'NAS', position: 0, groupIds: ['hosts', 'media'] },
+          { ...base, id: 'hv', name: 'Hypervisor', position: 1, groupIds: ['hosts'] },
+          { ...base, id: 'web', name: 'Website', position: 2, groupIds: [] },
+        ],
+      },
+      '/api/v1/probe-groups': {
+        body: [
+          { id: 'hosts', name: 'Hosts', probeIds: ['nas', 'hv'] },
+          { id: 'media', name: 'Media', probeIds: ['nas'] },
+        ],
+      },
+    }
+
+    it('lists each group in its own order, then the ungrouped rest under "Other"', async () => {
+      stubFetch(grouped)
+      renderWithProviders(<AdminProbesPage />)
+
+      await waitFor(() => expect(screen.getByText('Website')).toBeInTheDocument())
+
+      expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
+        'Hosts',
+        'Media',
+        'Other',
+        'Add a probe',
+      ])
+
+      const hosts = screen.getByRole('region', { name: 'Hosts' })
+      expect(within(hosts).getAllByRole('listitem').map((item) => within(item).getAllByRole('link')[0].textContent)).toEqual([
+        'NAS',
+        'Hypervisor',
+      ])
+      expect(within(hosts).getByText('also in Media')).toBeInTheDocument()
+    })
+
+    it("moving a grouped probe reorders that group's members, not the global probe order", async () => {
+      const calls = stubFetch({
+        ...grouped,
+        '/api/v1/probe-groups/hosts/members': { body: { id: 'hosts', name: 'Hosts', probeIds: ['hv', 'nas'] } },
+      })
+      const user = userEvent.setup()
+      renderWithProviders(<AdminProbesPage />)
+
+      await waitFor(() => expect(screen.getByText('Hypervisor')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: 'Move Hypervisor up' }))
+
+      await waitFor(() =>
+        expect(calls.some((call) => call.path === '/api/v1/probe-groups/hosts/members')).toBe(true),
+      )
+      const call = calls.find((candidate) => candidate.path === '/api/v1/probe-groups/hosts/members')
+      expect(call?.init?.method).toBe('PUT')
+      expect(JSON.parse(String(call?.init?.body))).toEqual({ probeIds: ['hv', 'nas'] })
+      expect(calls.some((candidate) => candidate.path === '/api/v1/probes/order')).toBe(false)
+    })
+
+    it('edit opens the form inside that row only, and the add form steps aside until it closes', async () => {
+      stubFetch(grouped)
+      const user = userEvent.setup()
+      renderWithProviders(<AdminProbesPage />)
+
+      await waitFor(() => expect(screen.getByText('Hypervisor')).toBeInTheDocument())
+      const hosts = screen.getByRole('region', { name: 'Hosts' })
+      await user.click(within(hosts).getByRole('button', { name: 'Edit NAS' }))
+
+      const row = within(hosts).getAllByRole('listitem')[0]
+      expect(within(row).getByRole('form', { name: 'Edit NAS' })).toBeInTheDocument()
+      expect(within(row).getByLabelText('Name')).toHaveFocus()
+      expect(screen.getAllByRole('form')).toHaveLength(1)
+      expect(screen.queryByRole('button', { name: 'Add probe' })).not.toBeInTheDocument()
+
+      await user.click(within(row).getByRole('button', { name: 'Cancel' }))
+      expect(screen.getByRole('form', { name: 'Add a probe' })).toBeInTheDocument()
+    })
+
+    it('confirming the delete of a shared probe says it leaves its other groups too', async () => {
+      stubFetch(grouped)
+      const user = userEvent.setup()
+      renderWithProviders(<AdminProbesPage />)
+
+      await waitFor(() => expect(screen.getByText('Hypervisor')).toBeInTheDocument())
+      const hosts = screen.getByRole('region', { name: 'Hosts' })
+      await user.click(within(hosts).getByRole('button', { name: 'Delete NAS' }))
+
+      expect(within(hosts).getByText('Delete NAS? It also leaves Media.')).toBeInTheDocument()
+      expect(within(hosts).getByRole('button', { name: 'Confirm delete NAS' })).toBeInTheDocument()
+    })
   })
 })
