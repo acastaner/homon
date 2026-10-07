@@ -159,6 +159,7 @@ reviews and merges the work.
 | 022 | DONE (2026-10-06, `14af996`, released `v0.4.0`) | S | — (builds on 002, 003, 012) | HTTP probes measure time to first byte and get the 30-day sparkline |
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
+| 025 | planned | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
