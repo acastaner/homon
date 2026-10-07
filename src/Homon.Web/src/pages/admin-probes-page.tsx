@@ -1,7 +1,28 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { ChevronDown, ChevronUp, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 
+import {
+  ALERT,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  COLUMN_HEAD,
+  EMPTY_STATE,
+  FIELD_INPUT,
+  FIELD_LABEL,
+  FIELDSET,
+  INLINE_FORM,
+  CARD_FORM,
+  LEGEND,
+  PANEL,
+  ROW,
+  ROW_CELLS,
+  ROW_TINT,
+} from '@/components/admin-classes'
+import { AdminPageHeader } from '@/components/admin-page-header'
+import { AdminSection } from '@/components/admin-section'
+import { ConfirmStrip } from '@/components/confirm-strip'
+import { IconButton, MoveButtons } from '@/components/icon-button'
 import { StatusChip } from '@/components/status-chip'
 import { problemDetail } from '@/lib/api'
 import { formatDuration } from '@/lib/probe-detail'
@@ -30,30 +51,6 @@ import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 /** Every kind the create form offers today — `smb`/`snmp` arrive with plans 004/005. */
 const CREATABLE_KINDS: readonly ('ping' | 'http' | 'message')[] = ['ping', 'http', 'message']
-
-const FIELD_LABEL = 'text-[13px] font-medium text-text'
-const FIELD_INPUT =
-  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
-const BUTTON_SECONDARY =
-  'inline-flex h-10 items-center justify-center gap-2 rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_PRIMARY =
-  'inline-flex h-10 items-center justify-center gap-2 rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_DANGER =
-  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
-const FIELDSET = 'flex flex-col gap-4 rounded-md border border-line p-4'
-const LEGEND = 'px-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted'
-const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
-
-/*
- * Row actions are icon-only, 40px square — the floor `e2e/layout.spec.ts`'s "admin row-action
- * buttons are tappable" holds every admin button to, which is why they are not the 32px the
- * design canvas drew. Quiet at rest (no border) so five of them per row read as one control
- * strip rather than five buttons; the probe's name is in every aria-label, so a screen reader
- * (and every test that queries "Move NAS up") still hears which probe a button acts on.
- */
-const ICON_BUTTON =
-  'inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-transparent text-muted hover:border-line-strong hover:bg-bg hover:text-text aria-expanded:border-line-strong aria-expanded:bg-bg aria-expanded:text-text disabled:pointer-events-none disabled:opacity-30'
-const ICON_BUTTON_DANGER = `${ICON_BUTTON} hover:border-down hover:bg-down-bg hover:text-down aria-expanded:border-down aria-expanded:bg-down-bg aria-expanded:text-down`
 
 /*
  * One grid per row, so every row and the header must share exactly this template or the columns
@@ -117,33 +114,23 @@ export function AdminProbesPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-4 border-b border-line-strong pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]">Probes</h1>
-          <p className="max-w-[680px] text-[14px] text-muted">
-            Listed the way the dashboard lays them out: each group in its own order, then every probe not in a
-            group. A probe in two groups appears in both, and can sit at a different place in each.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="mono text-[13px] text-muted">
-            {countOf(allProbes.length, 'probe')} · {countOf(allGroups.length, 'group')}
-          </span>
-          <Link to="/admin/probe-groups" className={BUTTON_SECONDARY}>
-            Manage groups
-          </Link>
-          {isEditingARow ? null : (
-            <button type="button" onClick={jumpToAddForm} className={BUTTON_PRIMARY}>
-              <Plus aria-hidden="true" size={16} strokeWidth={2.25} />
-              New probe
-            </button>
-          )}
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Probes"
+        description="Listed the way the dashboard lays them out: each group in its own order, then every probe not in a group. A probe in two groups appears in both, and can sit at a different place in each."
+        count={`${countOf(allProbes.length, 'probe')} · ${countOf(allGroups.length, 'group')}`}
+      >
+        <Link to="/admin/probe-groups" className={BUTTON_SECONDARY}>
+          Manage groups
+        </Link>
+        {isEditingARow ? null : (
+          <button type="button" onClick={jumpToAddForm} className={BUTTON_PRIMARY}>
+            <Plus aria-hidden="true" size={16} strokeWidth={2.25} />
+            New probe
+          </button>
+        )}
+      </AdminPageHeader>
       {sections.length === 0 ? (
-        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
-          No probes yet. Add one below.
-        </p>
+        <p className={EMPTY_STATE}>No probes yet. Add one below.</p>
       ) : (
         sections.map((section) => (
           <ProbeSectionPanel
@@ -212,29 +199,20 @@ function ProbeSectionPanel({
   onAskDelete: (key: string) => void
   onCancelDelete: () => void
 }) {
-  const headingId = `probe-section-${section.id}-heading`
-
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id={headingId} className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted">
-          {section.heading}
-        </h2>
-        <span className="text-[12.5px] text-muted">
-          {section.kind === 'group' ? countOf(section.rows.length, 'probe') : 'Not in any group'}
-        </span>
-      </div>
+    <AdminSection
+      id={`probe-section-${section.id}`}
+      heading={section.heading}
+      meta={section.kind === 'group' ? countOf(section.rows.length, 'probe') : 'Not in any group'}
+    >
       {section.rows.length === 0 ? (
-        <p className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted">
+        <p className={EMPTY_STATE}>
           No probes in this group yet, so the dashboard leaves it out. Tick it under Groups when you add or edit a
           probe.
         </p>
       ) : (
-        <div className="rounded-md border border-line bg-surface">
-          <div
-            aria-hidden="true"
-            className={`${ROW_GRID} hidden px-4 py-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted lg:grid`}
-          >
+        <div className={PANEL}>
+          <div aria-hidden="true" className={`${ROW_GRID} ${COLUMN_HEAD}`}>
             <span className="text-right">#</span>
             <span>Status</span>
             <span>Probe</span>
@@ -268,14 +246,8 @@ function ProbeSectionPanel({
           </ol>
         </div>
       )}
-    </section>
+    </AdminSection>
   )
-}
-
-const ROW_TINT: Record<string, string> = {
-  down: 'row-tint-down',
-  unstable: 'row-tint-unstable',
-  paused: 'row-paused',
 }
 
 function ProbeRow({
@@ -313,8 +285,8 @@ function ProbeRow({
   const confirmId = `probe-confirm-delete-${probe.id}`
 
   return (
-    <li className="border-t border-line first:border-t-0">
-      <div className={`${ROW_GRID} px-3.5 py-3 lg:min-h-12 lg:px-4 lg:py-1 ${isEditing ? 'bg-bg' : (ROW_TINT[state] ?? '')}`}>
+    <li className={ROW}>
+      <div className={`${ROW_GRID} ${ROW_CELLS} ${isEditing ? 'bg-bg' : (ROW_TINT[state] ?? '')}`}>
         <span className="mono col-start-1 row-start-1 text-right text-[13px] text-muted lg:col-start-auto lg:row-start-auto">
           {String(position).padStart(2, '0')}
         </span>
@@ -349,63 +321,36 @@ function ProbeRow({
           <span className="mono shrink-0 lg:text-right">{formatDuration(probe.pollIntervalSeconds)}</span>
         </span>
         <span className="col-span-3 flex items-center justify-end lg:col-span-1">
-          <button
-            type="button"
-            onClick={() => onMove(-1)}
-            disabled={isFirst}
-            aria-label={`Move ${probe.name} up`}
-            title="Move up"
-            className={ICON_BUTTON}
-          >
-            <ChevronUp aria-hidden="true" size={18} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove(1)}
-            disabled={isLast}
-            aria-label={`Move ${probe.name} down`}
-            title="Move down"
-            className={ICON_BUTTON}
-          >
-            <ChevronDown aria-hidden="true" size={18} strokeWidth={2} />
-          </button>
-          <span aria-hidden="true" className="mx-1.5 h-5 w-px bg-line" />
-          <button
-            type="button"
+          <MoveButtons
+            name={probe.name}
+            isFirst={isFirst}
+            isLast={isLast}
+            onMove={onMove}
+          />
+          <IconButton
+            icon={Pencil}
+            label={`Edit ${probe.name}`}
+            title="Edit"
             onClick={onEdit}
-            aria-label={`Edit ${probe.name}`}
             aria-expanded={isEditing}
             aria-controls={isEditing ? editorId : undefined}
-            title="Edit"
-            className={ICON_BUTTON}
-          >
-            <Pencil aria-hidden="true" size={16} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            icon={probe.isPaused ? Play : Pause}
+            label={probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
+            title={probe.isPaused ? 'Unpause' : 'Pause'}
             onClick={() => setPaused.mutate({ id: probe.id, isPaused: !probe.isPaused })}
             disabled={setPaused.isPending}
-            aria-label={probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
-            title={probe.isPaused ? 'Unpause' : 'Pause'}
-            className={ICON_BUTTON}
-          >
-            {probe.isPaused ? (
-              <Play aria-hidden="true" size={16} strokeWidth={2} />
-            ) : (
-              <Pause aria-hidden="true" size={16} strokeWidth={2} />
-            )}
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            icon={Trash2}
+            tone="danger"
+            label={`Delete ${probe.name}`}
+            title="Delete"
             onClick={onAskDelete}
-            aria-label={`Delete ${probe.name}`}
             aria-expanded={isConfirmingDelete}
             aria-controls={isConfirmingDelete ? confirmId : undefined}
-            title="Delete"
-            className={ICON_BUTTON_DANGER}
-          >
-            <Trash2 aria-hidden="true" size={16} strokeWidth={2} />
-          </button>
+          />
         </span>
       </div>
       {/*
@@ -414,28 +359,19 @@ function ProbeRow({
         groups leaves all of them — deleting from one section is not "remove from this group".
       */}
       {isConfirmingDelete ? (
-        <div
+        <ConfirmStrip
           id={confirmId}
-          className="flex flex-wrap items-center justify-end gap-2 border-t border-down/40 bg-down-bg px-4 py-2.5"
-        >
-          <p className="mr-auto text-[13.5px] font-medium text-down">
-            {alsoIn.length > 0
+          question={
+            alsoIn.length > 0
               ? `Delete ${probe.name}? It also leaves ${alsoIn.join(', ')}.`
-              : `Delete ${probe.name}?`}
-          </p>
-          <button
-            type="button"
-            onClick={() => deleteProbe.mutate(probe.id, { onSuccess: onCancelDelete })}
-            disabled={deleteProbe.isPending}
-            aria-label={`Confirm delete ${probe.name}`}
-            className={BUTTON_DANGER}
-          >
-            Delete
-          </button>
-          <button type="button" onClick={onCancelDelete} aria-label={`Cancel delete ${probe.name}`} className={BUTTON_SECONDARY}>
-            Cancel
-          </button>
-        </div>
+              : `Delete ${probe.name}?`
+          }
+          confirmLabel={`Confirm delete ${probe.name}`}
+          cancelLabel={`Cancel delete ${probe.name}`}
+          onConfirm={() => deleteProbe.mutate(probe.id, { onSuccess: onCancelDelete })}
+          onCancel={onCancelDelete}
+          isPending={deleteProbe.isPending}
+        />
       ) : null}
       {isEditing ? (
         <div id={editorId}>
@@ -619,11 +555,7 @@ function ProbeForm({
     <form
       onSubmit={onSubmit}
       aria-labelledby="probe-form-heading"
-      className={
-        isInline
-          ? 'flex flex-col gap-4 border-t border-line bg-bg px-3.5 pt-4 pb-5 lg:pr-4 lg:pl-[58px]'
-          : 'flex flex-col gap-4 rounded-md border border-line bg-surface p-5'
-      }
+      className={isInline ? INLINE_FORM : CARD_FORM}
     >
       <Heading id="probe-form-heading" className={isInline ? 'text-[14px] font-semibold' : 'text-[15px] font-semibold'}>
         {isEditing ? `Edit ${probe.name}` : 'Add a probe'}
