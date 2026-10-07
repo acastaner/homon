@@ -33,6 +33,9 @@ internal sealed class ProbeConfiguration : IEntityTypeConfiguration<Probe>
             .HasMaxLength(20)
             .IsRequired();
 
+        // Nullable, no default: null means no outage is open (plan 026's Decision 1).
+        builder.Property(p => p.DownSince);
+
         builder.Property(p => p.PollInterval)
             .IsRequired();
 

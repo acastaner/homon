@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Homon.Domain.Alerts;
 using Homon.Domain.Monitoring;
 using Homon.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -130,9 +131,15 @@ public sealed partial class ProbeScheduler(
 
         var observedAt = timeProvider.GetUtcNow();
 
-        // This is where plan 009's IProbeTransitionPublisher will read probe.Status before
-        // and after RecordObservation, right before the save.
-        probe.RecordObservation(result.Succeeded, result.LatencyMs, result.Detail, observedAt, result.DerivedStatus);
+        // The outage rule lives on the probe (Probe.DownSince, plan 026's D1). An outage change is
+        // written as an AlertNotification in this same save, so the status change and the mail that
+        // announces it commit together — the outbox AlertDispatcher drains (D2).
+        var downSinceBefore = probe.DownSince;
+        var outage = probe.RecordObservation(result.Succeeded, result.LatencyMs, result.Detail, observedAt, result.DerivedStatus);
+        if (outage is not ProbeOutageChange.None)
+        {
+            database.AlertNotifications.Add(AlertNotification.ForOutage(probe, outage, downSinceBefore, observedAt));
+        }
 
         // A derived Unknown is a runner saying "no verdict" — a message probe whose reporter has
         // never reported, or reported that it cannot tell (plan 021, A1). Recording an

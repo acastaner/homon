@@ -70,6 +70,13 @@ public sealed class Probe
     /// <summary>The probe's current state, per <see cref="ProbeStateMachine"/>.</summary>
     public ProbeStatus Status { get; set; } = ProbeStatus.Unknown;
 
+    /// <summary>
+    /// When Homon declared the current outage — set on entering <see cref="ProbeStatus.Down"/>,
+    /// kept through Unstable/Unknown/Paused, cleared on reaching <see cref="ProbeStatus.Up"/>.
+    /// Only <see cref="RecordObservation"/> changes it (plan 026, Decision 1).
+    /// </summary>
+    public DateTimeOffset? DownSince { get; set; }
+
     /// <summary>Consecutive successful polls. Reset to 0 by a failure.</summary>
     public int ConsecutiveSuccessCount { get; set; }
 
@@ -111,7 +118,12 @@ public sealed class Probe
     /// for such a probe that re-derived status is a placeholder the next poll corrects within
     /// one scheduler tick. Null for every polled kind, which keeps the state machine's answer.
     /// </param>
-    public void RecordObservation(
+    /// <returns>
+    /// <see cref="ProbeOutageChange.WentDown"/> when this observation opened an outage,
+    /// <see cref="ProbeOutageChange.Recovered"/> when it closed one, otherwise
+    /// <see cref="ProbeOutageChange.None"/> — the rules are plan 026's Decision 1.
+    /// </returns>
+    public ProbeOutageChange RecordObservation(
         bool succeeded,
         double? latencyMs,
         string? detail,
@@ -127,6 +139,20 @@ public sealed class Probe
         LastObservedAt = observedAt;
         LastLatencyMs = latencyMs;
         LastDetail = detail;
+
+        if (Status == ProbeStatus.Down && DownSince is null)
+        {
+            DownSince = observedAt;
+            return ProbeOutageChange.WentDown;
+        }
+
+        if (Status == ProbeStatus.Up && DownSince is not null)
+        {
+            DownSince = null;
+            return ProbeOutageChange.Recovered;
+        }
+
+        return ProbeOutageChange.None;
     }
 
     /// <summary>

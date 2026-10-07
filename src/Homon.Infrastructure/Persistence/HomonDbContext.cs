@@ -1,3 +1,4 @@
+using Homon.Domain.Alerts;
 using Homon.Domain.Auth;
 using Homon.Domain.Links;
 using Homon.Domain.Messaging;
@@ -14,7 +15,8 @@ namespace Homon.Infrastructure.Persistence;
 /// <summary>
 /// The application's single database context: ASP.NET Core Identity's user and role
 /// tables, the API keys, the probes and their groups, the household's links, the
-/// administrator's pages, the weather location, and the push reporters and their messages.
+/// administrator's pages, the weather location, the push reporters and their messages, and the
+/// alert settings and outbox.
 /// </summary>
 /// <remarks>
 /// Derives from <see cref="IdentityDbContext{TUser, TRole, TKey}"/> so the role tables
@@ -41,6 +43,10 @@ public class HomonDbContext(DbContextOptions<HomonDbContext> options)
     public DbSet<Reporter> Reporters => Set<Reporter>();
 
     public DbSet<Message> Messages => Set<Message>();
+
+    public DbSet<AlertSettings> AlertSettings => Set<AlertSettings>();
+
+    public DbSet<AlertNotification> AlertNotifications => Set<AlertNotification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
