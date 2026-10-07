@@ -16,6 +16,24 @@ const twoGroups = {
   '/api/v1/probes': { body: [] },
 }
 
+function probe(id: string, name: string, groupIds: string[]) {
+  return {
+    id,
+    name,
+    host: `${name.toLowerCase()}.invalid`,
+    kind: 'ping',
+    pollIntervalSeconds: 60,
+    failureThreshold: 2,
+    isPaused: false,
+    position: 0,
+    status: 'up',
+    lastDetail: null,
+    lastCheckedAt: null,
+    groupIds,
+    http: null,
+  }
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -61,5 +79,56 @@ describe('AdminProbeGroupsPage', () => {
 
     const post = calls.find((call) => call.path === '/api/v1/probe-groups' && call.init?.method === 'POST')
     expect(JSON.parse(String(post?.init?.body))).toEqual({ name: 'Hosts' })
+  })
+
+  it('Edit opens the members, and Remove sends PUT .../members without that probe', async () => {
+    const calls = stubFetch({
+      '/api/v1/probe-groups': { body: [{ id: 'group-2', name: 'Storage', probeIds: ['probe-1', 'probe-2'] }] },
+      '/api/v1/probes': { body: [probe('probe-1', 'NAS', ['group-2']), probe('probe-2', 'Backup', ['group-2'])] },
+      '/api/v1/probe-groups/group-2/members': { body: { id: 'group-2', name: 'Storage', probeIds: ['probe-2'] } },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbeGroupsPage />)
+
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument())
+    expect(screen.queryByRole('list', { name: 'Probes in Storage' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit Storage' }))
+
+    expect(screen.getByRole('list', { name: 'Probes in Storage' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove NAS from Storage' }))
+
+    await waitFor(() =>
+      expect(
+        calls.some((call) => call.path === '/api/v1/probe-groups/group-2/members' && call.init?.method === 'PUT'),
+      ).toBe(true),
+    )
+
+    const put = calls.find((call) => call.path === '/api/v1/probe-groups/group-2/members')
+    expect(JSON.parse(String(put?.init?.body))).toEqual({ probeIds: ['probe-2'] })
+  })
+
+  it('Delete says its probes are kept, and Confirm delete sends DELETE', async () => {
+    const calls = stubFetch({ ...twoGroups, '/api/v1/probe-groups/group-2': { status: 204 } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbeGroupsPage />)
+
+    await waitFor(() => expect(screen.getByText('Storage')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Delete Storage' }))
+
+    expect(screen.getByText(/Its probes are kept\./)).toBeInTheDocument()
+    expect(calls.some((call) => call.init?.method === 'DELETE')).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: 'Confirm delete Storage' }))
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/api/v1/probe-groups/group-2' && call.init?.method === 'DELETE')).toBe(
+        true,
+      ),
+    )
   })
 })
