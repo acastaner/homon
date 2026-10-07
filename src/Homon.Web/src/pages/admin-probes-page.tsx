@@ -25,6 +25,7 @@ import { ConfirmStrip } from '@/components/confirm-strip'
 import { IconButton, MoveButtons } from '@/components/icon-button'
 import { StatusChip } from '@/components/status-chip'
 import { problemDetail } from '@/lib/api'
+import { countOf } from '@/lib/admin-summary'
 import { formatDuration } from '@/lib/probe-detail'
 import { type ProbeGroup, useProbeGroups, useSetProbeGroupMembers } from '@/lib/probe-groups'
 import {
@@ -172,10 +173,6 @@ function jumpToAddForm() {
 
 function rowKey(section: ProbeSection, row: ProbeSectionRow): string {
   return `${section.id}:${row.probe.id}`
-}
-
-function countOf(count: number, noun: string): string {
-  return `${String(count)} ${noun}${count === 1 ? '' : 's'}`
 }
 
 function ProbeSectionPanel({

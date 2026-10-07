@@ -170,3 +170,14 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
 export function messageCategoryIcon(category: string): LucideIcon {
   return CATEGORY_ICONS[category] ?? Circle
 }
+
+/**
+ * True once a reporter's latest message named a next-expected time and that time has passed. A
+ * reporter that never declared one is never overdue (`nextExpectedAt` is null) — the Reporters
+ * page says so out loud, and the Admin home counts these.
+ */
+export function isOverdue(reporter: Reporter, now: number = Date.now()): boolean {
+  const due = reporter.latest?.nextExpectedAt
+
+  return due != null && new Date(due).getTime() < now
+}

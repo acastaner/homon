@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { Eye } from 'lucide-react'
 
 import { StatusChip, type StatusChipState } from '@/components/status-chip'
 
@@ -30,5 +31,13 @@ describe('StatusChip', () => {
     expect(screen.getByText('Succeeded')).toBeInTheDocument()
     expect(screen.queryByText('Up')).not.toBeInTheDocument()
     expect(document.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument()
+  })
+
+  it('a passed glyph replaces the default one', () => {
+    render(<StatusChip state="up" word="Published" glyph={Eye} />)
+
+    expect(screen.getByText('Published')).toBeInTheDocument()
+    expect(document.querySelector('svg.lucide-eye')).toBeInTheDocument()
+    expect(document.querySelector('svg.lucide-check')).not.toBeInTheDocument()
   })
 })

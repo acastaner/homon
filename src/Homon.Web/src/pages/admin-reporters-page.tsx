@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { StatusChip } from '@/components/status-chip'
 import { problemDetail } from '@/lib/api'
 import {
+  isOverdue,
   MESSAGE_STATUS_WORD,
   messageCategoryIcon,
   useCreateReporter,
@@ -425,12 +426,6 @@ function chipWord(reporter: Reporter): string {
   }
 
   return isOverdue(reporter) ? 'Overdue' : MESSAGE_STATUS_WORD[reporter.latest.status]
-}
-
-function isOverdue(reporter: Reporter): boolean {
-  const due = reporter.latest?.nextExpectedAt
-
-  return due != null && new Date(due).getTime() < Date.now()
 }
 
 /**

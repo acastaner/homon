@@ -36,9 +36,23 @@ const COLOR: Record<StatusChipState, string> = {
  * docs/design-brief.md's Constraints) — a state passed as `state` alone renders the fixed
  * word for it; `word` overrides only for a caller reusing the same glyph+colour under a
  * different label (Backups' Succeeded/Late/Failed).
+ *
+ * `glyph` swaps the icon and keeps the colour, for states that are not probe states: a page is
+ * Published (`Eye`, `up`) or Draft (`FilePen`, `paused`), an API key is Revoked (`Ban`, `paused`)
+ * or Expired (`Clock`, `unknown`), and a reporter past its next-expected time is Overdue
+ * (`Clock`, `down`). Reusing the glyph a probe state uses ("Draft" with a pause bars) would make
+ * a draft look like a paused probe, which it is not.
  */
-export function StatusChip({ state, word }: { state: StatusChipState; word?: string }) {
-  const Glyph = GLYPH[state]
+export function StatusChip({
+  state,
+  word,
+  glyph,
+}: {
+  state: StatusChipState
+  word?: string
+  glyph?: LucideIcon
+}) {
+  const Glyph = glyph ?? GLYPH[state]
 
   return (
     <span className={`inline-flex items-center gap-1.5 text-[13px] font-semibold ${COLOR[state]}`}>
