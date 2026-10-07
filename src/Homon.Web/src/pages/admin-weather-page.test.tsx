@@ -42,7 +42,7 @@ describe('AdminWeatherPage', () => {
     })
   })
 
-  it('shows "Remove location" only once a location exists, and it issues DELETE with an empty body', async () => {
+  it('shows "Remove location" only once a location exists, asks first, then issues DELETE with an empty body', async () => {
     const calls = stubFetch({
       '/api/v1/weather/settings': {
         body: { latitude: 51.5, longitude: -0.12, place: 'Test location', units: 'metric' },
@@ -55,6 +55,7 @@ describe('AdminWeatherPage', () => {
     const removeButton = await screen.findByRole('button', { name: 'Remove location' })
 
     await user.click(removeButton)
+    await user.click(screen.getByRole('button', { name: 'Confirm remove location' }))
 
     await waitFor(() =>
       expect(calls.some((call) => call.path === '/api/v1/weather/settings' && call.init?.method === 'DELETE')).toBe(
