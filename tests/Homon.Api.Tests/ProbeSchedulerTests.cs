@@ -193,55 +193,113 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
     public async Task Going_down_writes_one_pending_outbox_row_in_the_same_save()
     {
         var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero, failureThreshold: 1);
-        var runner = new FakeProbeRunner((_, _) => Task.FromResult(new ProbeResult(false, null, "ping: TimedOut")));
+        try
+        {
+            var runner = new FakeProbeRunner((_, _) => Task.FromResult(new ProbeResult(false, null, "ping: TimedOut")));
 
-        var scheduler = BuildScheduler(runner, Epoch);
-        await scheduler.TickAsync(CancellationToken.None);
+            var scheduler = BuildScheduler(runner, Epoch);
+            await scheduler.TickAsync(CancellationToken.None);
 
-        using var scope = factory.Services.CreateScope();
-        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+            using var scope = factory.Services.CreateScope();
+            var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
 
-        var rows = await database.AlertNotifications.Where(n => n.ProbeId == probe.Id).ToListAsync();
-        var row = Assert.Single(rows);
-        Assert.Equal(AlertKind.Down, row.Kind);
-        Assert.Equal(AlertDeliveryState.Pending, row.State);
-        Assert.Equal(probe.Name, row.ProbeName);
-        Assert.Equal("ping: TimedOut", row.Detail);
-        Assert.Equal(Epoch, row.DownSince);
+            var rows = await database.AlertNotifications.Where(n => n.ProbeId == probe.Id).ToListAsync();
+            var row = Assert.Single(rows);
+            Assert.Equal(AlertKind.Down, row.Kind);
+            Assert.Equal(AlertDeliveryState.Pending, row.State);
+            Assert.Equal(probe.Name, row.ProbeName);
+            Assert.Equal("ping: TimedOut", row.Detail);
+            Assert.Equal(Epoch, row.DownSince);
 
-        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
-        Assert.Equal(Epoch, reloaded.DownSince);
+            var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+            Assert.Equal(Epoch, reloaded.DownSince);
+        }
+        finally
+        {
+            await RemoveProbeAsync(probe.Id);
+        }
+    }
+
+    [DatabaseFact]
+    public async Task An_over_long_detail_still_records_the_probe_down_with_a_truncated_alert()
+    {
+        // Probe.LastDetail is unbounded and a runner writes raw exception text into it; the
+        // outbox column is not. The row is written in the scheduler's single save, so an
+        // untruncated copy would reject the whole save and the probe would never go Down.
+        var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero, failureThreshold: 1);
+        try
+        {
+            var longDetail = new string('x', 2000);
+            var runner = new FakeProbeRunner((_, _) => Task.FromResult(new ProbeResult(false, null, longDetail)));
+
+            var scheduler = BuildScheduler(runner, Epoch);
+            await scheduler.TickAsync(CancellationToken.None);
+
+            using var scope = factory.Services.CreateScope();
+            var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+            var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+            Assert.Equal(ProbeStatus.Down, reloaded.Status);
+            Assert.Equal(Epoch, reloaded.DownSince);
+
+            var row = Assert.Single(await database.AlertNotifications.Where(n => n.ProbeId == probe.Id).ToListAsync());
+            Assert.Equal(AlertKind.Down, row.Kind);
+            Assert.Equal(AlertNotification.DetailMaxLength, row.Detail!.Length);
+        }
+        finally
+        {
+            await RemoveProbeAsync(probe.Id);
+        }
     }
 
     [DatabaseFact]
     public async Task Coming_back_up_writes_a_second_row_that_remembers_when_the_outage_began()
     {
         var probe = await SeedProbeAsync(lastObservedAt: null, pollInterval: TimeSpan.Zero, failureThreshold: 1);
-        var clock = new FixedTimeProvider(Epoch);
-        var succeed = false;
-        var runner = new FakeProbeRunner((_, _) => Task.FromResult(
-            succeed ? new ProbeResult(true, 1.0, null) : new ProbeResult(false, null, "ping: TimedOut")));
+        try
+        {
+            var clock = new FixedTimeProvider(Epoch);
+            var succeed = false;
+            var runner = new FakeProbeRunner((_, _) => Task.FromResult(
+                succeed ? new ProbeResult(true, 1.0, null) : new ProbeResult(false, null, "ping: TimedOut")));
 
-        var scheduler = BuildScheduler(runner, clock);
-        await scheduler.TickAsync(CancellationToken.None);
+            var scheduler = BuildScheduler(runner, clock);
+            await scheduler.TickAsync(CancellationToken.None);
 
-        succeed = true;
-        clock.Advance(TimeSpan.FromMinutes(10));
-        await scheduler.TickAsync(CancellationToken.None);
+            succeed = true;
+            clock.Advance(TimeSpan.FromMinutes(10));
+            await scheduler.TickAsync(CancellationToken.None);
 
+            using var scope = factory.Services.CreateScope();
+            var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+            var rows = await database.AlertNotifications
+                .Where(n => n.ProbeId == probe.Id)
+                .OrderBy(n => n.Id)
+                .ToListAsync();
+            Assert.Equal([AlertKind.Down, AlertKind.Up], rows.Select(r => r.Kind));
+            Assert.Equal(Epoch, rows[1].DownSince);
+            Assert.Equal(Epoch.AddMinutes(10), rows[1].OccurredAt);
+
+            var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+            Assert.Null(reloaded.DownSince);
+        }
+        finally
+        {
+            await RemoveProbeAsync(probe.Id);
+        }
+    }
+
+    /// <summary>
+    /// A zero-interval probe is due on every tick for the rest of the class, so a test that seeds
+    /// one removes it: <c>Overlapping_ticks_never_double_poll_a_still_running_probe</c> counts
+    /// every poll the shared fake runner receives, not only its own probe's.
+    /// </summary>
+    private async Task RemoveProbeAsync(Guid id)
+    {
         using var scope = factory.Services.CreateScope();
         var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
-
-        var rows = await database.AlertNotifications
-            .Where(n => n.ProbeId == probe.Id)
-            .OrderBy(n => n.Id)
-            .ToListAsync();
-        Assert.Equal([AlertKind.Down, AlertKind.Up], rows.Select(r => r.Kind));
-        Assert.Equal(Epoch, rows[1].DownSince);
-        Assert.Equal(Epoch.AddMinutes(10), rows[1].OccurredAt);
-
-        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
-        Assert.Null(reloaded.DownSince);
+        await database.Probes.Where(p => p.Id == id).ExecuteDeleteAsync();
     }
 
     private async Task<Probe> SeedProbeAsync(

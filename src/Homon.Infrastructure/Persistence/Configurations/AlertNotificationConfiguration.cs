@@ -21,11 +21,11 @@ internal sealed class AlertNotificationConfiguration : IEntityTypeConfiguration<
 
         builder.Property(n => n.State).HasConversion<string>().HasMaxLength(20).IsRequired();
 
-        builder.Property(n => n.ProbeName).HasMaxLength(200).IsRequired();
+        builder.Property(n => n.ProbeName).HasMaxLength(AlertNotification.ProbeNameMaxLength).IsRequired();
 
-        builder.Property(n => n.Detail).HasMaxLength(500);
+        builder.Property(n => n.Detail).HasMaxLength(AlertNotification.DetailMaxLength);
 
-        builder.Property(n => n.LastError).HasMaxLength(500);
+        builder.Property(n => n.LastError).HasMaxLength(AlertNotification.LastErrorMaxLength);
 
         builder.Property(n => n.OccurredAt).IsRequired();
 

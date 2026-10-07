@@ -9,6 +9,15 @@ namespace Homon.Domain.Alerts;
 /// </summary>
 public sealed class AlertNotification
 {
+    /// <summary>Longest <see cref="Detail"/> the column holds.</summary>
+    public const int DetailMaxLength = 500;
+
+    /// <summary>Longest <see cref="ProbeName"/> the column holds.</summary>
+    public const int ProbeNameMaxLength = 200;
+
+    /// <summary>Longest <see cref="LastError"/> the column holds.</summary>
+    public const int LastErrorMaxLength = 500;
+
     public long Id { get; set; }
 
     public AlertKind Kind { get; set; }
@@ -60,12 +69,20 @@ public sealed class AlertNotification
         {
             Kind = kind,
             ProbeId = probe.Id,
-            ProbeName = probe.Name,
-            Detail = probe.LastDetail,
+            // Truncated because the sources are unbounded (Probe.LastDetail is plain text and a
+            // runner writes raw exception messages into it) while these columns are not, and
+            // this row is written inside the scheduler's single save: an over-long value would
+            // make PostgreSQL reject that save, lose the poll, and the probe would never be
+            // recorded as Down — the very event alerts exist for.
+            ProbeName = Truncate(probe.Name, ProbeNameMaxLength) ?? string.Empty,
+            Detail = Truncate(probe.LastDetail, DetailMaxLength),
             OccurredAt = at,
             DownSince = downSince,
             State = AlertDeliveryState.Pending,
             NextAttemptAt = at,
         };
     }
+
+    private static string? Truncate(string? value, int maxLength) =>
+        value is not null && value.Length > maxLength ? value[..maxLength] : value;
 }

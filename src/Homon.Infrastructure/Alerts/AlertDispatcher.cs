@@ -27,8 +27,6 @@ public sealed partial class AlertDispatcher(
     TimeProvider timeProvider,
     ILogger<AlertDispatcher> logger) : BackgroundService
 {
-    private const int LastErrorMaxLength = 500;
-
     private static readonly TimeSpan PruneInterval = TimeSpan.FromHours(1);
 
     private DateTimeOffset? _lastPrunedAt;
@@ -139,7 +137,7 @@ public sealed partial class AlertDispatcher(
         {
             row.Attempts++;
             var reason = ex.InnerException?.Message ?? ex.Message;
-            row.LastError = reason.Length > LastErrorMaxLength ? reason[..LastErrorMaxLength] : reason;
+            row.LastError = reason.Length > AlertNotification.LastErrorMaxLength ? reason[..AlertNotification.LastErrorMaxLength] : reason;
 
             if (row.Attempts >= opts.MaxAttempts)
             {
