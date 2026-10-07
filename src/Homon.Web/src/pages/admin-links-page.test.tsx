@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { AdminLinksPage } from '@/pages/admin-links-page'
@@ -64,5 +64,47 @@ describe('AdminLinksPage', () => {
       url: 'https://nas.invalid',
       description: 'Storage box',
     })
+  })
+
+  it('Delete asks first: nothing is sent until Confirm delete', async () => {
+    const calls = stubFetch({ ...threeLinks, '/api/v1/links/link-1': { status: 204 } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminLinksPage />)
+
+    await waitFor(() => expect(screen.getByText('NAS')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Delete NAS' }))
+
+    expect(calls.some((call) => call.init?.method === 'DELETE')).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: 'Confirm delete NAS' }))
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/api/v1/links/link-1' && call.init?.method === 'DELETE')).toBe(true),
+    )
+  })
+
+  it('Edit opens the form inside the row, and Cancel brings back the add form', async () => {
+    stubFetch(threeLinks)
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminLinksPage />)
+
+    await waitFor(() => expect(screen.getByText('NAS')).toBeInTheDocument())
+    expect(screen.getByRole('form', { name: 'New link' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit NAS' }))
+
+    const row = screen.getAllByRole('listitem')[0]
+
+    expect(within(row).getByRole('form', { name: 'Edit NAS' })).toBeInTheDocument()
+    expect(screen.getAllByRole('form')).toHaveLength(1)
+    expect(screen.queryByRole('form', { name: 'New link' })).not.toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByRole('form', { name: 'New link' })).toBeInTheDocument()
+    expect(screen.getAllByRole('form')).toHaveLength(1)
   })
 })

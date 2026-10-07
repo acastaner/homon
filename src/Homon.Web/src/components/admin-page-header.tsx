@@ -47,3 +47,14 @@ export function AdminPageHeader({
     </div>
   )
 }
+
+/**
+ * The header's "New X" button: the add form sits at the bottom of what can be a long page, so the
+ * button scrolls to it and puts the cursor in its first field (`inputId`). The form is the same
+ * element either way; this only moves the reader to it.
+ */
+export function jumpToField(inputId: string) {
+  const input = document.getElementById(inputId)
+  input?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  input?.focus({ preventScroll: true })
+}
