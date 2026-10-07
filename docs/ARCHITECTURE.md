@@ -951,6 +951,27 @@ household reports a slow probe page.
 The header's uptime is the 30-day figure computed exactly as `/status` computes it, so it matches
 the dashboard row; the graph's caption carries the chosen range's own uptime, and both are labelled.
 
+### 3.30 Admin pages share one set of primitives
+
+Every admin page is built from the pieces the Probes page (plan 024) established, extracted in plan
+025: the class strings in `components/admin-classes.ts`, `AdminPageHeader`, `AdminSection`,
+`IconButton`/`MoveButtons`, `ConfirmStrip` and `KeyReveal`, with `Stamp`/`formatStamp` for times. A
+new admin surface uses these rather than declaring its own class constants; the 40px floor on every
+button is held by `e2e/layout.spec.ts`.
+
+- **Summaries are computed in the browser.** The Admin home derives each section's one-line state
+  (`lib/admin-summary.ts`) from the list responses the section pages already fetch, under the same
+  cache keys. *Rejected*: a `/admin/summary` endpoint, which would restate seven derivations in C#
+  for one page; reconsider when an eighth section arrives.
+- **A watched reporter's Delete explains, it does not attempt.** The button stays enabled (a
+  disabled one cannot say why, and `aria-disabled` makes Playwright refuse the click) and opens a
+  neutral strip naming the probe. The page repeats the server's rule (`kind === 'message' && host
+  === identifier`, `ReporterEndpoints.cs`); the server's 400 remains the backstop.
+- **`formatStamp` follows the reader's locale and zone**, as `formatObservedAt` does; the year
+  appears only when it is not the current one. Tests never pin its text.
+- **Revoke stays on a reporter's paired key** on the API keys page. The page splits "Script keys"
+  from "Reporter keys", but a styling pass does not remove a capability.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.

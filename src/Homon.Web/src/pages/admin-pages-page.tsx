@@ -31,6 +31,13 @@ import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 const ROW_GRID =
   'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[132px_minmax(0,1fr)_minmax(0,1fr)_160px_176px] lg:gap-x-3.5'
 
+/*
+ * The region and list names avoid the word "Published" on purpose, though the heading shows it:
+ * `e2e/pages.spec.ts` reaches the editor's checkbox with `getByLabel('Published')`, which would
+ * also find a region or list of that name on this page while the editor is still loading, and
+ * fail strict mode. The visible heading is unchanged; only the accessible names differ.
+ */
+
 /**
  * The pages admin page: every page, published ones first and drafts under them, each with open /
  * edit / delete. Unlike Links, the editor is not a form inside the row — a TipTap editor needs its
@@ -65,7 +72,7 @@ export function AdminPagesPage() {
           id="published"
           heading="Published"
           meta="Linked from the dashboard"
-          label="Published pages"
+          label="Live pages"
           pages={published}
           confirmingId={confirmingId}
           onConfirmingChange={setConfirmingId}
@@ -104,7 +111,7 @@ function PageSection({
   onConfirmingChange: (id: string | null) => void
 }) {
   return (
-    <AdminSection id={id} heading={heading} meta={meta}>
+    <AdminSection id={id} heading={heading} meta={meta} label={label}>
       <div className={PANEL}>
         <div aria-hidden="true" className={`${ROW_GRID} ${COLUMN_HEAD}`}>
           <span>State</span>

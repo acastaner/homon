@@ -25,8 +25,12 @@ describe('AdminPagesPage', () => {
 
     renderWithProviders(<AdminPagesPage />)
 
-    const published = await screen.findByRole('region', { name: 'Published' })
-    const drafts = screen.getByRole('region', { name: 'Drafts' })
+    // Named "Live pages" rather than "Published": see the comment in admin-pages-page.tsx.
+    const published = await screen.findByRole('region', { name: 'Live pages' })
+    const drafts = screen.getByRole('region', { name: 'Draft pages' })
+
+    expect(within(published).getByRole('heading', { level: 2, name: 'Published' })).toBeInTheDocument()
+    expect(within(drafts).getByRole('heading', { level: 2, name: 'Drafts' })).toBeInTheDocument()
 
     expect(within(published).getByText('Welcome')).toBeInTheDocument()
     expect(within(published).queryByText('Wi-Fi')).not.toBeInTheDocument()

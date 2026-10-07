@@ -134,9 +134,8 @@ test.describe('the message gateway', () => {
     await expect(row).toContainText('Watched by a probe')
 
     await row.getByRole('button', { name: `Delete ${reporterName}` }).click()
-    await row.getByRole('button', { name: `Confirm delete ${reporterName}` }).click()
-
-    // The refusal names the probe, so the administrator knows what to do about it.
-    await expect(page.getByRole('alert')).toContainText(probeName)
+    // A watched reporter cannot be deleted; the row says which probe to change instead (plan 025 D6).
+    await expect(row).toContainText(probeName)
+    await expect(row.getByRole('button', { name: `Confirm delete ${reporterName}` })).toHaveCount(0)
   })
 })

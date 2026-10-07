@@ -82,3 +82,43 @@ test.describe('colour contrast, weather page', () => {
     expect(results.violations).toEqual([])
   })
 })
+
+/**
+ * The admin front door and the API keys page (plan 025): the home page puts status chips and
+ * tinted rows beside muted descriptions, and the keys page puts a chip, a link and muted metadata
+ * in every row — the admin pairs most likely to drift. The other admin routes share the same
+ * primitives and are left to the dashboard's coverage of them.
+ */
+test.describe('colour contrast, admin pages', () => {
+  // Same reset as the dashboard block above, for the same reason: it must run after a failure too.
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(() => {
+      window.localStorage.removeItem('homon-theme')
+      delete document.documentElement.dataset.theme
+    })
+  })
+
+  for (const route of [
+    { path: '/admin', heading: 'Admin' },
+    { path: '/admin/api-keys', heading: 'API keys' },
+  ]) {
+    test(`${route.path} has no color-contrast violations, dark scheme`, async ({ page }) => {
+      await page.goto(route.path)
+      await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible()
+
+      const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+
+      expect(results.violations).toEqual([])
+    })
+
+    test(`${route.path} has no color-contrast violations, light scheme`, async ({ page }) => {
+      await page.goto(route.path)
+      await page.getByRole('button', { name: 'Switch to light theme' }).click()
+      await expect(page.getByRole('heading', { level: 1, name: route.heading })).toBeVisible()
+
+      const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+
+      expect(results.violations).toEqual([])
+    })
+  }
+})
