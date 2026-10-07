@@ -63,4 +63,12 @@ describe('AdminPageEditorPage (new)', () => {
 
     expect(screen.getByLabelText('Slug')).toHaveValue('custom-slug')
   })
+
+  it('the Bold toggle starts unpressed', () => {
+    stubFetch({ '/api/v1/admin/pages': { body: [] } })
+
+    renderWithProviders(<AdminPageEditorPage />)
+
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'false')
+  })
 })

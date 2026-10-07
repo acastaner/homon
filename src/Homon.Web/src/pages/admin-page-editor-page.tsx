@@ -1,22 +1,31 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link as RouterLink, useNavigate, useParams } from 'react-router'
-import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import { useNavigate, useParams } from 'react-router'
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TiptapLink from '@tiptap/extension-link'
+import {
+  Bold,
+  Code,
+  ExternalLink,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Minus,
+  Redo2,
+  Strikethrough,
+  TextQuote,
+  Undo2,
+} from 'lucide-react'
 
+import { ALERT, BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_INPUT, FIELD_LABEL, PANEL } from '@/components/admin-classes'
+import { AdminPageHeader } from '@/components/admin-page-header'
+import { AdminSection } from '@/components/admin-section'
+import { IconButton } from '@/components/icon-button'
+import { Stamp } from '@/components/stamp'
 import { problemDetail } from '@/lib/api'
 import { useAdminPages, useCreatePage, usePage, useUpdatePage } from '@/lib/pages'
 import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
-
-const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
-const FIELD_LABEL = 'text-[13px] font-medium text-text'
-const FIELD_INPUT =
-  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
-const BUTTON_SECONDARY =
-  'inline-flex h-9 min-h-10 items-center justify-center rounded-md border border-line px-2.5 text-[13px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_PRIMARY =
-  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
-const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
 
 /**
  * Turns a title into a slug suggestion: lower-case, non-alphanumeric runs collapsed to one
@@ -65,7 +74,8 @@ export function AdminPageEditorPage() {
       attributes: {
         role: 'textbox',
         'aria-label': 'Body',
-        class: 'prose min-h-[220px] rounded-md border border-line bg-bg px-3 py-2 outline-none focus:border-line-strong',
+        // The panel around it supplies the border; the editor only needs room to write in.
+        class: 'prose min-h-[420px] px-6 py-5 outline-none',
       },
     },
   })
@@ -134,69 +144,119 @@ export function AdminPageEditorPage() {
     )
   }
 
+  const savedPage = isNew ? undefined : editingPage.data
+
   return (
-    <>
-      <h1 className={PAGE_H1}>{isNew ? 'New page' : `Edit ${title || 'page'}`}</h1>
-      <p>
-        <RouterLink to="/admin/pages" className="text-[14px] text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
-          Back to pages
-        </RouterLink>
-      </p>
-      <form onSubmit={onSubmit} aria-labelledby="page-form-heading" className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5">
-        <h2 id="page-form-heading" className="text-[15px] font-semibold">
-          {isNew ? 'New page' : 'Edit page'}
-        </h2>
-        <p className="flex flex-col gap-1">
-          <label htmlFor="page-title" className={FIELD_LABEL}>
-            Title
-          </label>
-          <input
-            id="page-title"
-            required
-            value={title}
-            onChange={(event) => onTitleChange(event.target.value)}
-            className={FIELD_INPUT}
-          />
-        </p>
-        <p className="flex flex-col gap-1">
-          <label htmlFor="page-slug" className={FIELD_LABEL}>
-            Slug
-          </label>
-          <input
-            id="page-slug"
-            required
-            value={slug}
-            onChange={(event) => onSlugChange(event.target.value)}
-            className={`${FIELD_INPUT} mono`}
-          />
-        </p>
-        <p>
-          <label className="flex items-center gap-2 text-[14px] text-text">
-            <input
-              type="checkbox"
-              checked={isPublished}
-              onChange={(event) => setIsPublished(event.target.checked)}
-              className="size-4 rounded border-line"
-            />
-            Published
-          </label>
-        </p>
-        <div className="flex flex-col gap-2">
-          <EditorToolbar editor={editor} />
-          <EditorContent editor={editor} />
-        </div>
-        {mutation.isError ? (
-          <p role="alert" className={ALERT}>
-            {problemDetail(mutation.error) ?? 'Could not save the page. Try again.'}
-          </p>
+    <form onSubmit={onSubmit} aria-labelledby="page-form-heading" className="flex flex-col gap-6">
+      <AdminPageHeader
+        title={isNew ? 'New page' : `Edit ${title || 'page'}`}
+        back={{ to: '/admin/pages', label: 'Pages' }}
+        description={
+          savedPage ? (savedPage.isPublished ? `Published at /pages/${savedPage.slug}` : 'Draft') : undefined
+        }
+      >
+        {savedPage?.isPublished ? (
+          <a
+            href={`/pages/${savedPage.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={BUTTON_SECONDARY}
+          >
+            View page
+            <ExternalLink aria-hidden="true" size={14} strokeWidth={2} />
+          </a>
         ) : null}
-        <p>
-          <button type="submit" disabled={mutation.isPending} className={BUTTON_PRIMARY}>
-            {isNew ? 'Create page' : 'Save changes'}
-          </button>
+        <button type="submit" disabled={mutation.isPending} className={BUTTON_PRIMARY}>
+          {isNew ? 'Create page' : 'Save changes'}
+        </button>
+      </AdminPageHeader>
+      {mutation.isError ? (
+        <p role="alert" className={ALERT}>
+          {problemDetail(mutation.error) ?? 'Could not save the page. Try again.'}
         </p>
-      </form>
-    </>
+      ) : null}
+      {/*
+        Wrapping columns rather than a breakpoint: the body wants about 560px and the settings
+        about 300, so the aside drops under the body exactly when the two no longer fit, at any
+        width, without a media query to keep in step with the shell's own gutters.
+      */}
+      <div className="flex flex-wrap gap-6">
+        <div className="min-w-0 flex-[999_1_560px]">
+          <AdminSection id="page-form" heading="Body">
+            <div className={PANEL}>
+              <EditorToolbar editor={editor} />
+              <EditorContent editor={editor} />
+            </div>
+          </AdminSection>
+        </div>
+        <div className="flex-[1_1_300px]">
+          <AdminSection id="page-settings" heading="Settings">
+            <div className={`${PANEL} flex flex-col gap-4 p-4`}>
+              <p className="flex flex-col gap-1">
+                <label htmlFor="page-title" className={FIELD_LABEL}>
+                  Title
+                </label>
+                <input
+                  id="page-title"
+                  required
+                  value={title}
+                  onChange={(event) => onTitleChange(event.target.value)}
+                  className={FIELD_INPUT}
+                />
+              </p>
+              <p className="flex flex-col gap-1">
+                <label htmlFor="page-slug" className={FIELD_LABEL}>
+                  Slug
+                </label>
+                <span className="flex h-10 items-center rounded-md border border-line bg-bg focus-within:border-line-strong">
+                  <span aria-hidden="true" className="mono pl-3 text-[13px] text-muted">
+                    /pages/
+                  </span>
+                  <input
+                    id="page-slug"
+                    required
+                    value={slug}
+                    onChange={(event) => onSlugChange(event.target.value)}
+                    className="mono h-full min-w-0 flex-1 bg-transparent pr-3 pl-0.5 text-[14px] text-text outline-none"
+                  />
+                </span>
+                <span className="text-[13px] text-muted">
+                  Lower-case letters, digits and hyphens. Changing it breaks old bookmarks.
+                </span>
+              </p>
+              <p className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 text-[14px] text-text">
+                  <input
+                    type="checkbox"
+                    checked={isPublished}
+                    onChange={(event) => setIsPublished(event.target.checked)}
+                    className="size-4 rounded border-line"
+                  />
+                  Published
+                </label>
+                <span className="text-[13px] text-muted">Readers can open it from the dashboard.</span>
+              </p>
+              {savedPage ? (
+                <dl className="flex flex-col gap-1 border-t border-line pt-3 text-[13px]">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">Created</dt>
+                    <dd>
+                      <Stamp iso={savedPage.createdAt} />
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">Last saved</dt>
+                    <dd>
+                      <Stamp iso={savedPage.updatedAt} />
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+            </div>
+          </AdminSection>
+        </div>
+      </div>
+    </form>
   )
 }
 
@@ -204,8 +264,31 @@ export function AdminPageEditorPage() {
  * One real button per allow-listed action — the extension list here and
  * `PageHtmlSanitizer.cs`'s allow-list move together (plans/007, Maintenance notes). No image
  * button: uploads are out of scope, and there is deliberately no raw-HTML escape hatch.
+ *
+ * Icon buttons, as the rest of the admin side has (plan 025's D8): the `aria-label`s are the
+ * words they have always had, because the unit and e2e suites find them by name, and each button
+ * repeats its label as a `title` for hover. The toggles carry `aria-pressed`, read with
+ * `useEditorState` so the toolbar re-renders when the cursor moves into bold text; Undo, Redo and
+ * Horizontal rule act once and have no pressed state.
  */
 function EditorToolbar({ editor }: { editor: Editor | null }) {
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: current }) => ({
+      bold: current?.isActive('bold') ?? false,
+      italic: current?.isActive('italic') ?? false,
+      strike: current?.isActive('strike') ?? false,
+      code: current?.isActive('code') ?? false,
+      h2: current?.isActive('heading', { level: 2 }) ?? false,
+      h3: current?.isActive('heading', { level: 3 }) ?? false,
+      h4: current?.isActive('heading', { level: 4 }) ?? false,
+      bulletList: current?.isActive('bulletList') ?? false,
+      orderedList: current?.isActive('orderedList') ?? false,
+      blockquote: current?.isActive('blockquote') ?? false,
+      link: current?.isActive('link') ?? false,
+    }),
+  })
+
   function runLink() {
     if (!editor) {
       return
@@ -228,98 +311,38 @@ function EditorToolbar({ editor }: { editor: Editor | null }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run()
   }
 
+  const disabled = !editor
+
   return (
-    <p className="flex flex-wrap gap-1.5 rounded-md border border-line bg-bg p-1.5">
-      <button type="button" aria-label="Bold" disabled={!editor} onClick={() => editor?.chain().focus().toggleBold().run()} className={BUTTON_SECONDARY}>
-        Bold
-      </button>
-      <button type="button" aria-label="Italic" disabled={!editor} onClick={() => editor?.chain().focus().toggleItalic().run()} className={BUTTON_SECONDARY}>
-        Italic
-      </button>
-      <button
-        type="button"
-        aria-label="Strikethrough"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleStrike().run()}
-        className={BUTTON_SECONDARY}
-      >
-        Strikethrough
-      </button>
-      <button type="button" aria-label="Code" disabled={!editor} onClick={() => editor?.chain().focus().toggleCode().run()} className={BUTTON_SECONDARY}>
-        Code
-      </button>
-      <button
-        type="button"
-        aria-label="Heading 2"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={BUTTON_SECONDARY}
-      >
-        Heading 2
-      </button>
-      <button
-        type="button"
-        aria-label="Heading 3"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={BUTTON_SECONDARY}
-      >
-        Heading 3
-      </button>
-      <button
-        type="button"
-        aria-label="Heading 4"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()}
-        className={BUTTON_SECONDARY}
-      >
-        Heading 4
-      </button>
-      <button
-        type="button"
-        aria-label="Bullet list"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        className={BUTTON_SECONDARY}
-      >
-        Bullet list
-      </button>
-      <button
-        type="button"
-        aria-label="Numbered list"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        className={BUTTON_SECONDARY}
-      >
-        Numbered list
-      </button>
-      <button
-        type="button"
-        aria-label="Blockquote"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-        className={BUTTON_SECONDARY}
-      >
-        Blockquote
-      </button>
-      <button type="button" aria-label="Link" disabled={!editor} onClick={runLink} className={BUTTON_SECONDARY}>
-        Link
-      </button>
-      <button
-        type="button"
-        aria-label="Horizontal rule"
-        disabled={!editor}
-        onClick={() => editor?.chain().focus().setHorizontalRule().run()}
-        className={BUTTON_SECONDARY}
-      >
-        Horizontal rule
-      </button>
-      <button type="button" aria-label="Undo" disabled={!editor} onClick={() => editor?.chain().focus().undo().run()} className={BUTTON_SECONDARY}>
-        Undo
-      </button>
-      <button type="button" aria-label="Redo" disabled={!editor} onClick={() => editor?.chain().focus().redo().run()} className={BUTTON_SECONDARY}>
-        Redo
-      </button>
-    </p>
+    <div role="toolbar" aria-label="Formatting" className="flex flex-wrap items-center gap-0.5 border-b border-line p-1.5">
+      <IconButton icon={Bold} label="Bold" disabled={disabled} aria-pressed={active?.bold ?? false} onClick={() => editor?.chain().focus().toggleBold().run()} />
+      <IconButton icon={Italic} label="Italic" disabled={disabled} aria-pressed={active?.italic ?? false} onClick={() => editor?.chain().focus().toggleItalic().run()} />
+      <IconButton icon={Strikethrough} label="Strikethrough" disabled={disabled} aria-pressed={active?.strike ?? false} onClick={() => editor?.chain().focus().toggleStrike().run()} />
+      <IconButton icon={Code} label="Code" disabled={disabled} aria-pressed={active?.code ?? false} onClick={() => editor?.chain().focus().toggleCode().run()} />
+      <ToolbarDivider />
+      <IconButton label="Heading 2" disabled={disabled} aria-pressed={active?.h2 ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
+        <span className="mono text-[12.5px] font-semibold">H2</span>
+      </IconButton>
+      <IconButton label="Heading 3" disabled={disabled} aria-pressed={active?.h3 ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}>
+        <span className="mono text-[12.5px] font-semibold">H3</span>
+      </IconButton>
+      <IconButton label="Heading 4" disabled={disabled} aria-pressed={active?.h4 ?? false} onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()}>
+        <span className="mono text-[12.5px] font-semibold">H4</span>
+      </IconButton>
+      <ToolbarDivider />
+      <IconButton icon={List} label="Bullet list" disabled={disabled} aria-pressed={active?.bulletList ?? false} onClick={() => editor?.chain().focus().toggleBulletList().run()} />
+      <IconButton icon={ListOrdered} label="Numbered list" disabled={disabled} aria-pressed={active?.orderedList ?? false} onClick={() => editor?.chain().focus().toggleOrderedList().run()} />
+      <IconButton icon={TextQuote} label="Blockquote" disabled={disabled} aria-pressed={active?.blockquote ?? false} onClick={() => editor?.chain().focus().toggleBlockquote().run()} />
+      <ToolbarDivider />
+      <IconButton icon={LinkIcon} label="Link" disabled={disabled} aria-pressed={active?.link ?? false} onClick={runLink} />
+      <IconButton icon={Minus} label="Horizontal rule" disabled={disabled} onClick={() => editor?.chain().focus().setHorizontalRule().run()} />
+      <span className="flex-1" />
+      <IconButton icon={Undo2} label="Undo" disabled={disabled} onClick={() => editor?.chain().focus().undo().run()} />
+      <IconButton icon={Redo2} label="Redo" disabled={disabled} onClick={() => editor?.chain().focus().redo().run()} />
+    </div>
   )
+}
+
+function ToolbarDivider() {
+  return <span aria-hidden="true" className="mx-1.5 h-5 w-px bg-line" />
 }
