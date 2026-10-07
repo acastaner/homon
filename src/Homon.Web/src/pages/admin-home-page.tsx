@@ -6,6 +6,7 @@ import { AdminPageHeader } from '@/components/admin-page-header'
 import { AdminSection } from '@/components/admin-section'
 import { StatusChip } from '@/components/status-chip'
 import {
+  summariseAlerts,
   summariseApiKeys,
   summariseGroups,
   summariseLinks,
@@ -15,6 +16,7 @@ import {
   summariseWeather,
   type AdminSummary,
 } from '@/lib/admin-summary'
+import { useAlertSettings } from '@/lib/alerts'
 import { useApiKeys } from '@/lib/api-keys'
 import { useLinks } from '@/lib/links'
 import { useAdminPages } from '@/lib/pages'
@@ -61,6 +63,7 @@ export function AdminHomePage() {
   const pages = useAdminPages()
   const weather = useWeatherSettings()
   const apiKeys = useApiKeys()
+  const alerts = useAlertSettings()
 
   const monitoring: AdminItem[] = [
     {
@@ -83,6 +86,13 @@ export function AdminHomePage() {
       description: 'Scripts and agents that push reports in.',
       summary: reporters.data ? summariseReporters(reporters.data) : null,
       downWord: 'overdue',
+    },
+    {
+      to: '/admin/alerts',
+      label: 'Alerts',
+      description: 'Who is emailed when a probe goes down or comes back.',
+      summary: alerts.data ? summariseAlerts(alerts.data) : null,
+      downWord: 'down',
     },
   ]
   const content: AdminItem[] = [

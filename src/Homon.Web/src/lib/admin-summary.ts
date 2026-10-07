@@ -1,3 +1,4 @@
+import type { AlertSettings } from '@/lib/alerts'
 import type { ApiKey } from '@/lib/api-keys'
 import type { Link } from '@/lib/links'
 import type { AdminPageSummary } from '@/lib/pages'
@@ -92,4 +93,15 @@ export function summariseApiKeys(keys: readonly ApiKey[]): AdminSummary {
   ].filter((part) => part !== null)
 
   return { text: parts.length > 0 ? parts.join(' · ') : '0 keys' }
+}
+
+export function summariseAlerts(settings: AlertSettings): AdminSummary {
+  const recipients = countOf(settings.recipients.length, 'recipient')
+  const isReady = settings.hasApiKey && settings.fromAddress.length > 0 && settings.recipients.length > 0
+
+  if (!isReady) {
+    return { text: 'Not set up' }
+  }
+
+  return { text: `${settings.isEnabled ? 'On' : 'Off'} · ${recipients}` }
 }

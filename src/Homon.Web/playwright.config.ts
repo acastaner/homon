@@ -119,8 +119,8 @@ export default defineConfig({
       // ASPNETCORE_ENVIRONMENT=Development is required rather than tidy: outside Development
       // the session cookie is `SecurePolicy.Always`, and over plain HTTP the browser then
       // silently drops it — every sign-in spec would fail with no cookie and no error. It
-      // also keeps the production email fail-fast out of the way, so the run needs no Resend
-      // token and mails nothing.
+      // also keeps the production refusal of `Email:Transport=Log` out of the way, which this
+      // run sets on purpose so that it mails nothing.
       // `tee`, not `>`: Playwright still gets the stream (so a server that dies says why in
       // the run's output) and a spec can still read the file. `mkdir -p` first because
       // `outputDir` is created by the test run, which starts after this.
@@ -150,12 +150,14 @@ export default defineConfig({
         // shared with every other process, and `dotnet test` is often running beside this.
         // Same reasoning as ci/run-ci.sh's copy of this line.
         DOTNET_hostBuilder__reloadConfigOnChange: 'false',
-        // NOT OPTIONAL. `dotnet run` in Development loads the developer's user-secrets
-        // store, which may hold a real `Email:ResendApiToken`. An environment variable
-        // outranks user secrets, and `IsResendConfigured` is a whitespace check, so an empty
-        // value here is what puts `LoggingEmailSender` back. The suite then mails nothing at
+        // NOT OPTIONAL. The Resend key is a row in the database, and `alerts.spec.ts` saves a
+        // key into it through the Alerts page; the transport is what decides whether that key
+        // is ever used. Development defaults to `Resend`, and `dotnet run` loads the
+        // developer's user-secrets store, which may say so too. An environment variable
+        // outranks user secrets, so `Log` here is what puts `LoggingEmailSender` in charge: a
+        // test email turns Sent by being written to the log, and the suite mails nothing at
         // all, which is the only acceptable posture for something that runs unattended.
-        Email__ResendApiToken: '',
+        Email__Transport: 'Log',
         // The gate must never call a live external API — same reasoning as the line above.
         // Every assertion in weather.spec.ts is against FakeWeatherProvider's fixed forecast.
         Weather__Provider: 'Fake',

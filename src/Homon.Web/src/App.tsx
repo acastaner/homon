@@ -27,6 +27,7 @@ const AdminReportersPage = lazy(() =>
 )
 const AdminApiKeysPage = lazy(() => import('@/pages/admin-api-keys-page').then((m) => ({ default: m.AdminApiKeysPage })))
 const AdminWeatherPage = lazy(() => import('@/pages/admin-weather-page').then((m) => ({ default: m.AdminWeatherPage })))
+const AdminAlertsPage = lazy(() => import('@/pages/admin-alerts-page').then((m) => ({ default: m.AdminAlertsPage })))
 
 /**
  * The route table. Everything lives under one `AppShell` (header, main, footer); the admin
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="reporters" element={<AdminReportersPage />} />
           <Route path="api-keys" element={<AdminApiKeysPage />} />
           <Route path="weather" element={<AdminWeatherPage />} />
+          <Route path="alerts" element={<AdminAlertsPage />} />
         </Route>
         {/* An unknown path is the dashboard, not a 404: on a home dashboard there is nothing
             better to show, and a stale bookmark should land somewhere useful. */}

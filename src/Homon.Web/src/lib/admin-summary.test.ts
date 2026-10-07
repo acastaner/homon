@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   countOf,
+  summariseAlerts,
   summariseApiKeys,
   summariseGroups,
   summariseLinks,
@@ -10,6 +11,7 @@ import {
   summariseReporters,
   summariseWeather,
 } from '@/lib/admin-summary'
+import type { AlertSettings } from '@/lib/alerts'
 import type { ApiKey } from '@/lib/api-keys'
 import type { Link } from '@/lib/links'
 import type { AdminPageSummary } from '@/lib/pages'
@@ -198,5 +200,30 @@ describe('summariseApiKeys', () => {
     expect(summariseApiKeys([key()]).text).toBe('1 active')
     expect(summariseApiKeys([key({ revokedAt: '2026-10-01T00:00:00Z' })]).text).toBe('1 revoked')
     expect(summariseApiKeys([]).text).toBe('0 keys')
+  })
+})
+
+describe('summariseAlerts', () => {
+  const settings: AlertSettings = {
+    isEnabled: true,
+    hasApiKey: true,
+    fromAddress: 'alerts@example.test',
+    fromName: 'Homon',
+    recipients: ['a@example.test', 'b@example.test'],
+    updatedAt: '2026-10-01T08:00:00Z',
+  }
+
+  it('is Not set up until there is a key, a From address and a recipient', () => {
+    expect(summariseAlerts({ ...settings, hasApiKey: false })).toEqual({ text: 'Not set up' })
+    expect(summariseAlerts({ ...settings, fromAddress: '' })).toEqual({ text: 'Not set up' })
+    expect(summariseAlerts({ ...settings, recipients: [] })).toEqual({ text: 'Not set up' })
+  })
+
+  it('says Off with the recipient count when set up but switched off', () => {
+    expect(summariseAlerts({ ...settings, isEnabled: false })).toEqual({ text: 'Off · 2 recipients' })
+  })
+
+  it('says On with the recipient count when set up and enabled', () => {
+    expect(summariseAlerts({ ...settings, recipients: ['a@example.test'] })).toEqual({ text: 'On · 1 recipient' })
   })
 })

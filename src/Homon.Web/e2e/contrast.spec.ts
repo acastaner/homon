@@ -101,6 +101,7 @@ test.describe('colour contrast, admin pages', () => {
   for (const route of [
     { path: '/admin', heading: 'Admin' },
     { path: '/admin/api-keys', heading: 'API keys' },
+    { path: '/admin/alerts', heading: 'Alerts' },
   ]) {
     test(`${route.path} has no color-contrast violations, dark scheme`, async ({ page }) => {
       await page.goto(route.path)

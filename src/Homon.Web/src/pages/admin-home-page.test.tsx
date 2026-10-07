@@ -5,7 +5,7 @@ import { AdminHomePage } from '@/pages/admin-home-page'
 import { renderWithProviders } from '@/test/render'
 import { stubFetch } from '@/test/fetch'
 
-const SECTION_NAMES = ['Probes', 'Probe groups', 'Reporters', 'Links', 'Pages', 'Weather', 'API keys']
+const SECTION_NAMES = ['Probes', 'Probe groups', 'Reporters', 'Alerts', 'Links', 'Pages', 'Weather', 'API keys']
 
 const probe = {
   id: 'probe-1',
@@ -37,6 +37,9 @@ describe('AdminHomePage', () => {
       '/api/v1/admin/pages': { body: [] },
       '/api/v1/weather/settings': { status: 204 },
       '/api/v1/api-keys': { body: [] },
+      '/api/v1/alerts/settings': {
+        body: { isEnabled: false, hasApiKey: false, fromAddress: '', fromName: 'Homon', recipients: [], updatedAt: null },
+      },
     })
 
     renderWithProviders(<AdminHomePage />)
@@ -61,6 +64,7 @@ describe('AdminHomePage', () => {
       '/api/v1/admin/pages': { status: 500 },
       '/api/v1/weather/settings': { status: 500 },
       '/api/v1/api-keys': { status: 500 },
+      '/api/v1/alerts/settings': { status: 500 },
     })
 
     renderWithProviders(<AdminHomePage />)
