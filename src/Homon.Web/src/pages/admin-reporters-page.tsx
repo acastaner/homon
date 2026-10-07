@@ -1,7 +1,32 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
+import { Clock, History, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react'
 
+import {
+  ALERT,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  CARD_FORM,
+  COLUMN_HEAD,
+  EMPTY_STATE,
+  FIELD_INPUT,
+  FIELD_LABEL,
+  INLINE_FORM,
+  PANEL,
+  ROW,
+  ROW_CELLS,
+  ROW_TINT,
+} from '@/components/admin-classes'
+import { AdminPageHeader, jumpToField } from '@/components/admin-page-header'
+import { AdminSection } from '@/components/admin-section'
+import { ConfirmStrip } from '@/components/confirm-strip'
+import { IconButton } from '@/components/icon-button'
+import { KeyReveal } from '@/components/key-reveal'
+import { Stamp } from '@/components/stamp'
 import { StatusChip } from '@/components/status-chip'
+import { summariseReporters } from '@/lib/admin-summary'
 import { problemDetail } from '@/lib/api'
+import { useProbes, type Probe } from '@/lib/probes'
 import {
   isOverdue,
   MESSAGE_STATUS_WORD,
@@ -22,21 +47,15 @@ import { useDocumentTitle, pageTitle } from '@/lib/use-document-title'
 
 const EMPTY_FIELDS: ReporterFields = { name: '', description: '', bodyVisibility: 'administrator' }
 
-const PAGE_H1 = 'border-b border-line-strong pb-4 text-[22px] font-semibold -tracking-[0.01em] sm:text-[26px]'
-const FIELD_LABEL = 'text-[13px] font-medium text-text'
-const FIELD_INPUT =
-  'h-10 w-full rounded-md border border-line bg-bg px-3 text-[14px] text-text outline-none focus:border-line-strong'
-const BUTTON_SECONDARY =
-  'inline-flex h-10 items-center justify-center rounded-md border border-line px-3 text-[13.5px] font-medium text-text hover:border-line-strong disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_PRIMARY =
-  'inline-flex h-10 items-center justify-center rounded-md bg-text px-4 text-[14px] font-medium text-bg hover:opacity-90 disabled:pointer-events-none disabled:opacity-50'
-const BUTTON_DANGER =
-  'inline-flex h-10 items-center justify-center rounded-md border border-down/40 bg-down-bg px-3 text-[13.5px] font-medium text-down hover:bg-down/20'
-const ALERT = 'rounded-md border border-down/40 bg-down-bg px-3 py-2 text-[14px] font-medium text-down'
-const REVEAL =
-  'flex flex-col gap-2 rounded-md border border-unstable/40 bg-unstable-bg px-3 py-2.5 text-[14px] text-text'
-const EMPTY_STATE =
-  'rounded-md border border-dashed border-line-strong bg-surface px-4 py-3.5 text-[13.5px] text-muted'
+/*
+ * One grid per row, so every row and the column head share this template or the columns stop
+ * lining up. The action column is `minmax(176px, auto)` rather than fixed because it is the one
+ * cell that may need more: four 40px buttons and a divider is 175px. Below `lg` a row folds as the
+ * Probes page's does: reporter and status on the first line, the muted facts (last report, next
+ * expected, kept, watched) on the second, actions on the third.
+ */
+const ROW_GRID =
+  'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[124px_minmax(0,1.3fr)_128px_minmax(0,1fr)_56px_minmax(0,1fr)_minmax(176px,auto)] lg:gap-x-3.5'
 
 /**
  * The reporters admin page: register a reporter (which mints the one key paired with it and shows
@@ -50,11 +69,13 @@ export function AdminReportersPage() {
   useDocumentTitle(pageTitle('Reporters', 'Admin'))
 
   const reporters = useReporters()
+  // Only to find which probe watches a reporter, so Delete can explain instead of attempting
+  // (plan 025's D6). The same query the Probes page uses, so it is usually already cached.
+  const probes = useProbes()
   const deleteReporter = useDeleteReporter()
   const replaceKey = useReplaceReporterKey()
 
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [fields, setFields] = useState<ReporterFields>(EMPTY_FIELDS)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [confirmingKeyId, setConfirmingKeyId] = useState<string | null>(null)
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null)
@@ -64,50 +85,25 @@ export function AdminReportersPage() {
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null)
 
   const rows = reporters.data ?? []
-
-  function startEditing(reporter: Reporter) {
-    setEditingId(reporter.id)
-    setFields({
-      name: reporter.name,
-      description: reporter.description ?? '',
-      bodyVisibility: reporter.bodyVisibility,
-    })
-  }
-
-  function cancelEditing() {
-    setEditingId(null)
-    setFields(EMPTY_FIELDS)
-  }
+  const allProbes = probes.data ?? []
+  const summary = summariseReporters(rows)
 
   return (
     <>
-      <h1 className={PAGE_H1}>Reporters</h1>
-      <p className="text-[14px] text-muted">
-        A reporter is a script or an agent somewhere else that pushes a report to Homon with its own
-        API key. Watch one on the dashboard by adding a probe of kind “Message”.
-      </p>
+      <AdminPageHeader
+        title="Reporters"
+        description="A reporter is a script or an agent somewhere else that pushes a report to Homon with its own API key. Watch one on the dashboard by adding a probe of kind “Message”."
+        count={summary.down ? `${summary.text} · ${String(summary.down)} overdue` : summary.text}
+      >
+        {editingId === null ? (
+          <button type="button" onClick={() => jumpToField('reporter-name')} className={BUTTON_PRIMARY}>
+            <Plus aria-hidden="true" size={16} strokeWidth={2.25} />
+            New reporter
+          </button>
+        ) : null}
+      </AdminPageHeader>
       {revealed !== null ? (
-        <div role="alert" className={REVEAL}>
-          <p className="font-semibold">This key will not be shown again. Store it now.</p>
-          <p className="flex flex-col gap-1">
-            <label htmlFor="revealed-key" className={FIELD_LABEL}>
-              API key for {revealed.name}
-            </label>
-            <input id="revealed-key" readOnly value={revealed.token} className={`${FIELD_INPUT} mono`} />
-          </p>
-          <p className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard?.writeText(revealed.token)}
-              className={BUTTON_SECONDARY}
-            >
-              Copy key
-            </button>
-            <button type="button" onClick={() => setRevealed(null)} className={BUTTON_SECONDARY}>
-              Done
-            </button>
-          </p>
-        </div>
+        <KeyReveal inputId="revealed-key" name={revealed.name} token={revealed.token} onDone={() => setRevealed(null)} />
       ) : null}
       {deleteReporter.isError ? (
         <p role="alert" className={ALERT}>
@@ -119,95 +115,275 @@ export function AdminReportersPage() {
           {problemDetail(replaceKey.error) ?? 'Could not replace the key. Try again.'}
         </p>
       ) : null}
-      {rows.length === 0 ? (
-        <p className={EMPTY_STATE}>No reporters yet. Add one below.</p>
-      ) : (
-        <ol
-          aria-label="Reporters"
-          className="flex list-none flex-col divide-y divide-line rounded-md border border-line bg-surface px-4"
-        >
-          {rows.map((reporter) => (
-            <li key={reporter.id} className="flex flex-col gap-2 py-3">
-              <p className="flex flex-wrap items-center gap-2">
-                <StatusChip state={chipState(reporter)} word={chipWord(reporter)} />
-                <span className="text-[15px] font-semibold">{reporter.name}</span>
-                <span className="mono text-[13px] text-muted">{reporter.identifier}</span>
-              </p>
-              {reporter.description ? (
-                <p className="text-[14px] text-muted">{reporter.description}</p>
-              ) : null}
-              <p className="text-[13px] text-muted">{describe(reporter)}</p>
-              <p className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setOpenHistoryId(openHistoryId === reporter.id ? null : reporter.id)}
-                  className={BUTTON_SECONDARY}
-                >
-                  Messages from {reporter.name}
-                </button>
-                <button type="button" onClick={() => startEditing(reporter)} className={BUTTON_SECONDARY}>
-                  Edit {reporter.name}
-                </button>
-                {confirmingKeyId === reporter.id ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        replaceKey.mutate(reporter.id, {
-                          onSuccess: (result) => setRevealed({ name: reporter.name, token: result.token }),
-                        })
-                        setConfirmingKeyId(null)
-                      }}
-                      className={BUTTON_DANGER}
-                    >
-                      Confirm replace the key for {reporter.name}
-                    </button>
-                    <button type="button" onClick={() => setConfirmingKeyId(null)} className={BUTTON_SECONDARY}>
-                      Cancel replace the key for {reporter.name}
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" onClick={() => setConfirmingKeyId(reporter.id)} className={BUTTON_SECONDARY}>
-                    Replace the key for {reporter.name}
-                  </button>
-                )}
-                {confirmingDeleteId === reporter.id ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        deleteReporter.mutate(reporter.id)
-                        setConfirmingDeleteId(null)
-                      }}
-                      className={BUTTON_DANGER}
-                    >
-                      Confirm delete {reporter.name}
-                    </button>
-                    <button type="button" onClick={() => setConfirmingDeleteId(null)} className={BUTTON_SECONDARY}>
-                      Cancel delete {reporter.name}
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" onClick={() => setConfirmingDeleteId(reporter.id)} className={BUTTON_DANGER}>
-                    Delete {reporter.name}
-                  </button>
-                )}
-              </p>
-              {openHistoryId === reporter.id ? <ReporterHistory reporter={reporter} /> : null}
-            </li>
-          ))}
-        </ol>
-      )}
-      <ReporterForm
-        key={editingId ?? 'new-reporter'}
-        fields={fields}
-        onFieldsChange={setFields}
-        editingId={editingId}
-        editingName={rows.find((reporter) => reporter.id === editingId)?.name ?? null}
-        onCancel={cancelEditing}
-        onCreated={(name, token) => setRevealed({ name, token })}
-      />
+      <AdminSection id="reporters" heading="Registered" meta="Status is each reporter's own last word">
+        {rows.length === 0 ? (
+          <p className={EMPTY_STATE}>No reporters yet. Add one below.</p>
+        ) : (
+          <div className={PANEL}>
+            <div aria-hidden="true" className={`${ROW_GRID} ${COLUMN_HEAD}`}>
+              <span>Status</span>
+              <span>Reporter</span>
+              <span>Last report</span>
+              <span>Next expected</span>
+              <span className="text-right">Kept</span>
+              <span>Watched</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <ol aria-label="Reporters" className="flex list-none flex-col">
+              {rows.map((reporter) => (
+                <ReporterRow
+                  key={reporter.id}
+                  reporter={reporter}
+                  watcher={allProbes.find((probe) => probe.kind === 'message' && probe.host === reporter.identifier)}
+                  isEditing={editingId === reporter.id}
+                  isHistoryOpen={openHistoryId === reporter.id}
+                  isConfirmingDelete={confirmingDeleteId === reporter.id}
+                  isConfirmingKey={confirmingKeyId === reporter.id}
+                  isDeleting={deleteReporter.isPending}
+                  onToggleHistory={() => setOpenHistoryId(openHistoryId === reporter.id ? null : reporter.id)}
+                  onEdit={() => {
+                    setConfirmingDeleteId(null)
+                    setConfirmingKeyId(null)
+                    setEditingId((current) => (current === reporter.id ? null : reporter.id))
+                  }}
+                  onDoneEditing={() => setEditingId(null)}
+                  onAskKey={() => {
+                    setEditingId(null)
+                    setConfirmingDeleteId(null)
+                    setConfirmingKeyId((current) => (current === reporter.id ? null : reporter.id))
+                  }}
+                  onCancelKey={() => setConfirmingKeyId(null)}
+                  onConfirmKey={() => {
+                    replaceKey.mutate(reporter.id, {
+                      onSuccess: (result) => setRevealed({ name: reporter.name, token: result.token }),
+                    })
+                    setConfirmingKeyId(null)
+                  }}
+                  onAskDelete={() => {
+                    setEditingId(null)
+                    setConfirmingKeyId(null)
+                    setConfirmingDeleteId((current) => (current === reporter.id ? null : reporter.id))
+                  }}
+                  onCancelDelete={() => setConfirmingDeleteId(null)}
+                  onConfirmDelete={() => {
+                    deleteReporter.mutate(reporter.id)
+                    setConfirmingDeleteId(null)
+                  }}
+                />
+              ))}
+            </ol>
+          </div>
+        )}
+      </AdminSection>
+      {/*
+        Not rendered while a row is being edited: ReporterForm's inputs carry fixed ids, so two at
+        once would hand both "Name" labels to whichever input came first.
+      */}
+      {editingId === null ? (
+        <ReporterForm
+          key="new-reporter"
+          reporter={null}
+          variant="card"
+          onDoneEditing={() => undefined}
+          onCreated={(name, token) => setRevealed({ name, token })}
+        />
+      ) : null}
     </>
+  )
+}
+
+function ReporterRow({
+  reporter,
+  watcher,
+  isEditing,
+  isHistoryOpen,
+  isConfirmingDelete,
+  isConfirmingKey,
+  isDeleting,
+  onToggleHistory,
+  onEdit,
+  onDoneEditing,
+  onAskKey,
+  onCancelKey,
+  onConfirmKey,
+  onAskDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  reporter: Reporter
+  watcher: Probe | undefined
+  isEditing: boolean
+  isHistoryOpen: boolean
+  isConfirmingDelete: boolean
+  isConfirmingKey: boolean
+  isDeleting: boolean
+  onToggleHistory: () => void
+  onEdit: () => void
+  onDoneEditing: () => void
+  onAskKey: () => void
+  onCancelKey: () => void
+  onConfirmKey: () => void
+  onAskDelete: () => void
+  onCancelDelete: () => void
+  onConfirmDelete: () => void
+}) {
+  const state = chipState(reporter)
+  const overdue = isOverdue(reporter)
+  const isWatched = reporter.isWatched || watcher !== undefined
+  const editorId = `reporter-editor-${reporter.id}`
+  const historyId = `reporter-history-${reporter.id}`
+  const keyConfirmId = `reporter-confirm-key-${reporter.id}`
+  const deleteConfirmId = `reporter-confirm-delete-${reporter.id}`
+  const latest = reporter.latest
+
+  return (
+    <li className={ROW}>
+      <div className={`${ROW_GRID} ${ROW_CELLS} ${isEditing ? 'bg-bg' : (ROW_TINT[state] ?? '')}`}>
+        <span className="col-start-2 row-start-1 flex lg:col-start-auto lg:row-start-auto">
+          <StatusChip state={state} word={chipWord(reporter)} glyph={overdue ? Clock : undefined} />
+        </span>
+        <span className="col-start-1 row-start-1 flex min-w-0 flex-col lg:col-start-auto lg:row-start-auto">
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-[15px] font-semibold">{reporter.name}</span>
+            <span className="mono text-[13px] text-muted">{reporter.identifier}</span>
+          </span>
+          {reporter.description ? <span className="text-[13px] text-muted">{reporter.description}</span> : null}
+          {reporter.keyRevokedAt !== null ? (
+            <span className="text-[13px] text-down">Its key is revoked: replace it</span>
+          ) : null}
+        </span>
+        {/* One wrapping line under the name below lg; four cells of the grid at lg (`contents`). */}
+        <span className="col-span-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted lg:contents">
+          <span className="min-w-0">
+            {latest === null ? 'No report received yet' : <Stamp iso={latest.receivedAt} />}
+          </span>
+          <span className={`min-w-0 ${overdue ? 'text-down' : ''}`}>
+            {latest === null ? (
+              '—'
+            ) : latest.nextExpectedAt === null ? (
+              'Not declared — can never be overdue'
+            ) : (
+              <>
+                by <Stamp iso={latest.nextExpectedAt} />
+              </>
+            )}
+          </span>
+          <span className="mono lg:text-right">
+            {reporter.messageCount}
+            <span className="lg:hidden"> kept</span>
+          </span>
+          <span className="min-w-0">
+            {isWatched ? (
+              watcher ? (
+                <Link to={`/probes/${watcher.id}`} className="text-text underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
+                  Watched by a probe
+                </Link>
+              ) : (
+                'Watched by a probe'
+              )
+            ) : (
+              'No probe watches this reporter'
+            )}
+          </span>
+        </span>
+        <span className="col-span-2 flex items-center justify-end lg:col-span-1">
+          <IconButton
+            icon={History}
+            label={`Messages from ${reporter.name}`}
+            title="Messages"
+            onClick={onToggleHistory}
+            aria-expanded={isHistoryOpen}
+            aria-controls={isHistoryOpen ? historyId : undefined}
+          />
+          <span aria-hidden="true" className="mx-1.5 h-5 w-px bg-line" />
+          <IconButton
+            icon={Pencil}
+            label={`Edit ${reporter.name}`}
+            title="Edit"
+            onClick={onEdit}
+            aria-expanded={isEditing}
+            aria-controls={isEditing ? editorId : undefined}
+          />
+          <IconButton
+            icon={KeyRound}
+            label={`Replace the key for ${reporter.name}`}
+            title="Replace the key"
+            onClick={onAskKey}
+            aria-expanded={isConfirmingKey}
+            aria-controls={isConfirmingKey ? keyConfirmId : undefined}
+          />
+          {/*
+            A watched reporter's Delete stays a real, enabled button — D6: `disabled` cannot say
+            why, and `aria-disabled` would make Playwright refuse to click it. It is only styled
+            quiet, with no red hover, and clicking it explains.
+          */}
+          <IconButton
+            icon={Trash2}
+            tone={isWatched ? 'default' : 'danger'}
+            label={`Delete ${reporter.name}`}
+            title={isWatched ? 'A probe watches this reporter' : 'Delete'}
+            onClick={onAskDelete}
+            aria-expanded={isConfirmingDelete}
+            aria-controls={isConfirmingDelete ? deleteConfirmId : undefined}
+          />
+        </span>
+      </div>
+      {isConfirmingKey ? (
+        <ConfirmStrip
+          id={keyConfirmId}
+          question={`Replace the key for ${reporter.name}? The old one stops working at once.`}
+          confirmText="Replace key"
+          confirmLabel={`Confirm replace the key for ${reporter.name}`}
+          cancelLabel={`Cancel replace the key for ${reporter.name}`}
+          onConfirm={onConfirmKey}
+          onCancel={onCancelKey}
+        />
+      ) : null}
+      {isConfirmingDelete ? (
+        isWatched ? (
+          <ConfirmStrip
+            id={deleteConfirmId}
+            tone="neutral"
+            question={
+              <>
+                {watcher ? (
+                  <Link to={`/probes/${watcher.id}`} className="underline decoration-line-strong underline-offset-[3px] hover:decoration-text">
+                    {watcher.name}
+                  </Link>
+                ) : (
+                  'A probe'
+                )}{' '}
+                watches {reporter.name}, so it cannot be deleted. Delete that probe or point it at another reporter
+                first.
+              </>
+            }
+            confirmLabel={`Confirm delete ${reporter.name}`}
+            cancelLabel={`Close the explanation for ${reporter.name}`}
+            onCancel={onCancelDelete}
+          />
+        ) : (
+          <ConfirmStrip
+            id={deleteConfirmId}
+            question={`Delete ${reporter.name}? Its key stops working and its messages are deleted.`}
+            confirmLabel={`Confirm delete ${reporter.name}`}
+            cancelLabel={`Cancel delete ${reporter.name}`}
+            onConfirm={onConfirmDelete}
+            onCancel={onCancelDelete}
+            isPending={isDeleting}
+          />
+        )
+      ) : null}
+      {isHistoryOpen ? (
+        <div id={historyId} className="border-t border-line bg-bg px-3.5 py-3 lg:px-4">
+          <ReporterHistory reporter={reporter} />
+        </div>
+      ) : null}
+      {isEditing ? (
+        <div id={editorId}>
+          <ReporterForm reporter={reporter} variant="inline" onDoneEditing={onDoneEditing} onCreated={() => undefined} />
+        </div>
+      ) : null}
+    </li>
   )
 }
 
@@ -230,7 +406,7 @@ function ReporterHistory({ reporter }: { reporter: Reporter }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-line">
+    <div className="overflow-x-auto rounded-md border border-line bg-surface">
       <table aria-label={`Messages from ${reporter.name}`} className="w-full border-collapse text-left">
         <thead className="text-[12px] uppercase tracking-[0.08em] text-muted">
           <tr>
@@ -254,8 +430,12 @@ function ReporterHistory({ reporter }: { reporter: Reporter }) {
 
             return (
               <tr key={message.id} className="border-t border-line align-top">
-                <td className="mono px-3 py-2 text-[13px] whitespace-nowrap">{message.receivedAt}</td>
-                <td className="px-3 py-2 text-[13.5px]">{MESSAGE_STATUS_WORD[message.status]}</td>
+                <td className="px-3 py-2 text-[13px] whitespace-nowrap">
+                  <Stamp iso={message.receivedAt} />
+                </td>
+                <td className="px-3 py-2 text-[13.5px]">
+                  <StatusChip state={MESSAGE_CHIP_STATE[message.status]} word={MESSAGE_STATUS_WORD[message.status]} />
+                </td>
                 <td className="px-3 py-2 text-[13.5px]">
                   <span className="inline-flex items-center gap-1.5">
                     <CategoryIcon aria-hidden className="size-3.5" />
@@ -282,25 +462,34 @@ function ReporterHistory({ reporter }: { reporter: Reporter }) {
   )
 }
 
+/**
+ * Registers a reporter (`variant="card"`, the panel at the bottom of the page) or edits one
+ * (`variant="inline"`, opened inside that reporter's row). Same fields either way; the inline one
+ * drops the panel chrome.
+ */
 function ReporterForm({
-  fields,
-  onFieldsChange,
-  editingId,
-  editingName,
-  onCancel,
+  reporter,
+  variant,
+  onDoneEditing,
   onCreated,
 }: {
-  fields: ReporterFields
-  onFieldsChange: (fields: ReporterFields) => void
-  editingId: string | null
-  editingName: string | null
-  onCancel: () => void
+  reporter: Reporter | null
+  variant: 'card' | 'inline'
+  onDoneEditing: () => void
   onCreated: (name: string, token: string) => void
 }) {
   const createReporter = useCreateReporter()
   const updateReporter = useUpdateReporter()
-  const isEditing = editingId !== null
+  const isEditing = reporter !== null
+  const isInline = variant === 'inline'
+  const Heading = isInline ? 'h3' : 'h2'
   const mutation = isEditing ? updateReporter : createReporter
+
+  const [fields, setFields] = useState<ReporterFields>(
+    reporter
+      ? { name: reporter.name, description: reporter.description ?? '', bodyVisibility: reporter.bodyVisibility }
+      : EMPTY_FIELDS,
+  )
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -312,14 +501,14 @@ function ReporterForm({
     }
 
     if (isEditing) {
-      updateReporter.mutate({ id: editingId, fields: trimmed }, { onSuccess: onCancel })
+      updateReporter.mutate({ id: reporter.id, fields: trimmed }, { onSuccess: onDoneEditing })
       return
     }
 
     createReporter.mutate(trimmed, {
       onSuccess: (created) => {
         onCreated(created.reporter.name, created.token)
-        onFieldsChange(EMPTY_FIELDS)
+        setFields(EMPTY_FIELDS)
       },
     })
   }
@@ -328,72 +517,83 @@ function ReporterForm({
     <form
       onSubmit={onSubmit}
       aria-labelledby="reporter-form-heading"
-      className="flex flex-col gap-4 rounded-md border border-line bg-surface p-5"
+      className={isInline ? INLINE_FORM : CARD_FORM}
     >
-      <h2 id="reporter-form-heading" className="text-[15px] font-semibold">
-        {isEditing ? `Edit ${editingName ?? 'reporter'}` : 'Add a reporter'}
-      </h2>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="reporter-name" className={FIELD_LABEL}>
-          Name
-        </label>
-        <input
-          id="reporter-name"
-          name="name"
-          required
-          maxLength={100}
-          value={fields.name}
-          onChange={(event) => onFieldsChange({ ...fields, name: event.target.value })}
-          className={FIELD_INPUT}
-        />
-      </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="reporter-description" className={FIELD_LABEL}>
-          Description
-        </label>
-        <input
-          id="reporter-description"
-          name="description"
-          maxLength={280}
-          value={fields.description}
-          onChange={(event) => onFieldsChange({ ...fields, description: event.target.value })}
-          className={FIELD_INPUT}
-        />
-      </p>
-      <p className="flex flex-col gap-1">
-        <label htmlFor="reporter-visibility" className={FIELD_LABEL}>
-          Message visibility
-        </label>
-        <select
-          id="reporter-visibility"
-          name="bodyVisibility"
-          value={fields.bodyVisibility}
-          onChange={(event) =>
-            onFieldsChange({ ...fields, bodyVisibility: event.target.value as BodyVisibility })
-          }
-          className={FIELD_INPUT}
-        >
-          <option value="administrator">Administrators only</option>
-          <option value="reader">Everyone who can read the dashboard</option>
-        </select>
-      </p>
+      <Heading id="reporter-form-heading" className={isInline ? 'text-[14px] font-semibold' : 'text-[15px] font-semibold'}>
+        {isEditing ? `Edit ${reporter.name}` : 'New reporter'}
+      </Heading>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-4">
+        <p className="flex flex-col gap-1">
+          <label htmlFor="reporter-name" className={FIELD_LABEL}>
+            Name
+          </label>
+          <input
+            id="reporter-name"
+            name="name"
+            required
+            maxLength={100}
+            value={fields.name}
+            onChange={(event) => setFields({ ...fields, name: event.target.value })}
+            className={FIELD_INPUT}
+          />
+        </p>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="reporter-description" className={FIELD_LABEL}>
+            Description
+          </label>
+          <input
+            id="reporter-description"
+            name="description"
+            maxLength={280}
+            value={fields.description}
+            onChange={(event) => setFields({ ...fields, description: event.target.value })}
+            className={FIELD_INPUT}
+          />
+        </p>
+        <p className="flex flex-col gap-1">
+          <label htmlFor="reporter-visibility" className={FIELD_LABEL}>
+            Message visibility
+          </label>
+          <select
+            id="reporter-visibility"
+            name="bodyVisibility"
+            value={fields.bodyVisibility}
+            onChange={(event) => setFields({ ...fields, bodyVisibility: event.target.value as BodyVisibility })}
+            className={FIELD_INPUT}
+          >
+            <option value="administrator">Administrators only</option>
+            <option value="reader">Everyone who can read the dashboard</option>
+          </select>
+        </p>
+      </div>
       {mutation.isError ? (
         <p role="alert" className={ALERT}>
           {problemDetail(mutation.error) ?? 'Could not save the reporter. Try again.'}
         </p>
       ) : null}
-      <p className="flex flex-wrap gap-2">
+      <p className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={mutation.isPending} className={BUTTON_PRIMARY}>
           {isEditing ? 'Save' : 'Add reporter'}
         </button>
         {isEditing ? (
-          <button type="button" onClick={onCancel} className={BUTTON_SECONDARY}>
+          <button type="button" onClick={onDoneEditing} className={BUTTON_SECONDARY}>
             Cancel
           </button>
-        ) : null}
+        ) : (
+          <span className="text-[13px] text-muted">Adding one mints its key and shows it once, at the top of this page.</span>
+        )}
       </p>
     </form>
   )
+}
+
+/** What a message's own status looks like as a chip: the same mapping the reporter's row uses. */
+const MESSAGE_CHIP_STATE: Record<MessageStatus, StatusChipState> = {
+  success: 'up',
+  none: 'up',
+  warning: 'unstable',
+  failure: 'down',
+  unknown: 'unknown',
 }
 
 /**
@@ -409,15 +609,7 @@ function chipState(reporter: Reporter): StatusChipState {
     return 'down'
   }
 
-  const states: Record<MessageStatus, StatusChipState> = {
-    success: 'up',
-    none: 'up',
-    warning: 'unstable',
-    failure: 'down',
-    unknown: 'unknown',
-  }
-
-  return states[reporter.latest.status]
+  return MESSAGE_CHIP_STATE[reporter.latest.status]
 }
 
 function chipWord(reporter: Reporter): string {
@@ -426,33 +618,4 @@ function chipWord(reporter: Reporter): string {
   }
 
   return isOverdue(reporter) ? 'Overdue' : MESSAGE_STATUS_WORD[reporter.latest.status]
-}
-
-/**
- * The line under a row. It names the missing recurrence explicitly, because a reporter that never
- * declared one can never be overdue — it looks monitored while only its own failures can take it
- * off green, and that is worth saying out loud rather than leaving blank.
- */
-function describe(reporter: Reporter): string {
-  const parts: string[] = []
-
-  if (reporter.latest === null) {
-    parts.push('No report received yet')
-  } else {
-    parts.push(`Last report ${reporter.latest.receivedAt}`)
-    parts.push(
-      reporter.latest.nextExpectedAt === null
-        ? 'No recurrence declared — this reporter can never be overdue'
-        : `Next expected by ${reporter.latest.nextExpectedAt}`,
-    )
-  }
-
-  parts.push(`${reporter.messageCount} message${reporter.messageCount === 1 ? '' : 's'} kept`)
-  parts.push(reporter.isWatched ? 'Watched by a probe' : 'No probe watches this reporter')
-
-  if (reporter.keyRevokedAt !== null) {
-    parts.push('Its key is revoked — replace it')
-  }
-
-  return parts.join(' · ')
 }

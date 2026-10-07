@@ -33,6 +33,9 @@ const oneReporter = {
       },
     ],
   },
+  // The page finds a reporter's watching probe from the probe list; stubFetch throws on a path a
+  // test did not declare.
+  '/api/v1/probes': { body: [] },
 }
 
 afterEach(() => {
@@ -62,6 +65,7 @@ describe('AdminReportersPage', () => {
           },
         ],
       },
+      '/api/v1/probes': { body: [] },
     })
 
     renderWithProviders(<AdminReportersPage />)
@@ -74,6 +78,7 @@ describe('AdminReportersPage', () => {
   it('posts the trimmed fields and the visibility the form chose', async () => {
     const calls = stubFetch({
       '/api/v1/reporters': { body: [] },
+      '/api/v1/probes': { body: [] },
       // The POST answers with the created shape, not the list's: its success handler reads the
       // reporter's name and its one-time token out of it.
       'POST /api/v1/reporters': {
@@ -117,6 +122,7 @@ describe('AdminReportersPage', () => {
     // secret back out of the cache instead of its own state would fail here.
     stubFetch({
       '/api/v1/reporters': { body: [] },
+      '/api/v1/probes': { body: [] },
       'POST /api/v1/reporters': { status: 201, body: created },
     })
     const user = userEvent.setup()
@@ -214,5 +220,58 @@ describe('AdminReportersPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.getByLabelText('API key for clockmaster backup')).toHaveValue('hmn_NEWTOKEN1234_s3cr3t')
+  })
+
+  it('a watched reporter explains instead of attempting: names the probe, offers no confirm, sends no DELETE', async () => {
+    const reporter = { ...oneReporter['/api/v1/reporters'].body[0], isWatched: true }
+    const calls = stubFetch({
+      '/api/v1/reporters': { body: [reporter] },
+      '/api/v1/probes': {
+        body: [
+          {
+            id: 'probe-1',
+            name: 'Nightly restic',
+            host: reporter.identifier,
+            kind: 'message',
+            pollIntervalSeconds: 900,
+            failureThreshold: 2,
+            isPaused: false,
+            position: 0,
+            status: 'up',
+            lastDetail: null,
+            lastCheckedAt: null,
+            groupIds: [],
+            http: null,
+          },
+        ],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminReportersPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Delete clockmaster backup' }))
+
+    expect(screen.getByRole('link', { name: 'Nightly restic' })).toHaveAttribute('href', '/probes/probe-1')
+    expect(screen.queryByRole('button', { name: 'Confirm delete clockmaster backup' })).not.toBeInTheDocument()
+    expect(calls.some((call) => call.init?.method === 'DELETE')).toBe(false)
+  })
+
+  it("an overdue reporter's chip reads Overdue", async () => {
+    stubFetch({
+      '/api/v1/reporters': {
+        body: [
+          {
+            ...oneReporter['/api/v1/reporters'].body[0],
+            latest: { ...oneReporter['/api/v1/reporters'].body[0].latest, nextExpectedAt: '2020-01-01T00:00:00Z' },
+          },
+        ],
+      },
+      '/api/v1/probes': { body: [] },
+    })
+
+    renderWithProviders(<AdminReportersPage />)
+
+    expect(await screen.findByText('Overdue')).toBeInTheDocument()
   })
 })
