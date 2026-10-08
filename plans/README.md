@@ -13,15 +13,24 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
-**026 is planned (2026-10-07, against `79dfe0a`) and supersedes 009.** The maintainer asked for
-alert email configured in the GUI rather than in `.env`, which overturned 009's premise: the Resend
-key (encrypted with `ISecretProtector`), the sender and the recipients now live in a singleton
-`AlertSettings` row, and the `Email:*` configuration keys and the Production no-token refusal go
-away — one `Email:Transport` (`Resend` | `Log`) switch remains, so the gate still mails nobody.
-Three maintainer decisions are recorded at the top of the plan: GUI-only settings, a durable outbox
-(`AlertNotification` rows written in the scheduler's own save, retried, listed on the page), and
-the page name **Alerts**. Only Down and the return to Up mail; the outage is `Probe.DownSince`,
-which is also what lets the recovery mail say how long the probe was down.
+**026 is merged.** `main` carries its five commits, `cf5164a`…`13c2770`, plus the plan itself
+(`7b5dbbc`), fast-forwarded from `79dfe0a` on 2026-10-08 on the maintainer's word after a manual
+check in a browser on the branch. It supersedes 009. Homon now mails when a probe is declared Down
+and again when it is declared Up, with how long it was down (`Probe.DownSince`). The Resend key,
+sender and recipients are set on `/admin/alerts`, in a singleton `AlertSettings` row, and each mail
+goes through an `AlertNotification` outbox, retried, and listed on that page (`docs/ARCHITECTURE.md`
+§3.31). It was executed by a dispatched agent in this checkout and reviewed independently: the
+reviewer re-ran the suites one at a time — `web` → 261, `api` → 513 passed with 0 skipped, `e2e` →
+149. One revision round. An over-long probe detail (unbounded `Probe.LastDetail`, raw exception text)
+would have overflowed the outbox's `varchar(500)` inside the scheduler's save and stopped the probe
+from ever being recorded as Down. The defect was in the plan; `13c2770` truncates the detail and tests
+it with a 2,000-character one.
+
+**Two things for anyone deploying 026.** Run the `migrate` verb (`AddAlerts`). Copy the new
+`compose.prod.yaml` to the host, because `deploy.sh` does not carry it: the old copy still demands the
+retired `RESEND_API_TOKEN` / `HOMON_FROM_ADDRESS` / `HOMON_ALERT_RECIPIENT_1` variables, which are now
+ignored. Then enter the key on `/admin/alerts` and press "Send test email". Each probe already down at
+upgrade gets one Down row on its first poll, marked `Skipped` because alerts are not set up yet.
 
 **025 is merged.** `main` carries its twelve commits, `ea79e11`…`1202c67`, fast-forwarded from `fd3f598` on
 2026-10-07 on the maintainer's word after a manual check in a browser on the branch, and released as `v0.7.0`
@@ -181,7 +190,7 @@ reviews and merges the work.
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
 | 025 | DONE (2026-10-07, `1202c67`, released `v0.7.0`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
-| 026 | IN PROGRESS — reviewer-approved 2026-10-07 at `13c2770` on `plan/026-alerts-by-email`; awaiting the maintainer's manual check | L | — (builds on 002, 003, 021, 023, 025) | Alerts by email: a Down mail and a back-Up mail with the downtime, the Resend key, sender and recipients set on `/admin/alerts`, delivered through a durable outbox with a "Recent alerts" list — supersedes 009 |
+| 026 | DONE (2026-10-08, `13c2770`) | L | — (builds on 002, 003, 021, 023, 025) | Alerts by email: a Down mail and a back-Up mail with the downtime, the Resend key, sender and recipients set on `/admin/alerts`, delivered through a durable outbox with a "Recent alerts" list — supersedes 009 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
