@@ -13,6 +13,16 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
+**026 is planned (2026-10-07, against `79dfe0a`) and supersedes 009.** The maintainer asked for
+alert email configured in the GUI rather than in `.env`, which overturned 009's premise: the Resend
+key (encrypted with `ISecretProtector`), the sender and the recipients now live in a singleton
+`AlertSettings` row, and the `Email:*` configuration keys and the Production no-token refusal go
+away — one `Email:Transport` (`Resend` | `Log`) switch remains, so the gate still mails nobody.
+Three maintainer decisions are recorded at the top of the plan: GUI-only settings, a durable outbox
+(`AlertNotification` rows written in the scheduler's own save, retried, listed on the page), and
+the page name **Alerts**. Only Down and the return to Up mail; the outage is `Probe.DownSince`,
+which is also what lets the recovery mail say how long the probe was down.
+
 **025 is merged.** `main` carries its twelve commits, `ea79e11`…`1202c67`, fast-forwarded from `fd3f598` on
 2026-10-07 on the maintainer's word after a manual check in a browser on the branch, and released as `v0.7.0`
 the same day. Every admin page now follows
@@ -154,7 +164,7 @@ reviews and merges the work.
 | 006 | DONE (2026-09-16, `191df56`) | M | — (reuses 002's ordering convention) | Links |
 | 007 | DONE (2026-09-16, `9b47556`) | M | — | Pages and the WYSIWYG editor |
 | 008 | REJECTED (superseded by 021) | L | — | Backup reports and API-key administration — the file stays for its reasoning, which 021 carries over by name |
-| 009 | planned | L | 002, 021 | Alerts by email |
+| 009 | REJECTED (superseded by 026) | L | 002, 021 | Alerts by email — the file stays in `archive/` for its reasoning, which 026 carries over by name |
 | 010 | DONE (2026-09-16, `c653799`) | M | — | Weather widget |
 | 011 | planned | L | 003 (secret protector); follows 010's cache shape | Family calendar widget |
 | 012 | DONE (2026-09-16, `51de1b4`) | L | 013, 002, 003, 006, 007, 010 (Slice A: 001 only) | Design pass (from `docs/design-brief.md`; target fixed: Status board, dark by default — `docs/design/`); styles only what has landed |
@@ -171,6 +181,7 @@ reviews and merges the work.
 | 023 | DONE (2026-10-07, `60c1d16`, released `v0.5.0`) | L | — (builds on 002, 003, 012, 021, 022) | Probe page: name, uptime, a 24 h / 7 d / 30 d latency graph and recent polls for readers; configuration for administrators only |
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
 | 025 | DONE (2026-10-07, `1202c67`, released `v0.7.0`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
+| 026 | IN PROGRESS — reviewer-approved 2026-10-07 at `13c2770` on `plan/026-alerts-by-email`; awaiting the maintainer's manual check | L | — (builds on 002, 003, 021, 023, 025) | Alerts by email: a Down mail and a back-Up mail with the downtime, the Resend key, sender and recipients set on `/admin/alerts`, delivered through a durable outbox with a "Recent alerts" list — supersedes 009 |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
@@ -271,9 +282,11 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   `Security/ISecretProtector` with purpose `Homon.Secrets.v1` and write-only secret wire
   semantics (004, 005, 011). 004, 005 and 011 narrow `""` from "clear" to a 400 where the
   secret is mandatory; each says so.
-- **009 adds the transition seam to 002's scheduler** (`ProbeTransition` on a bounded
-  channel) and, as a separable last step beyond the brief's wording, backup Failed/Late
-  alerts using 008's `BackupJobEvaluator` plus a `BackupJob.LastNotifiedState` column.
+- **026 supersedes 009** and carries over its Decisions 5 (the poll loop never waits on mail),
+  7 (UTC timestamps, every interpolated value HTML-encoded, links to `FrontEnd:PublicBaseUrl`) and
+  9 (an administrator's test send) by name. It replaces 009's in-memory channel with an outbox
+  table and 009's "both ends known" startup guard with a persisted `Probe.DownSince` — a restart
+  re-announces nothing because the outage state survives it.
 - **011 follows 010's `WeatherCache` shape** (pull-based, 15 min fresh, stale-on-error,
   single-flight) and builds the cache from its own description if 010 has not landed.
 - **012 runs last**; its Slice A (tokens, fonts, theme bootstrap, toggle) depends only on
@@ -337,13 +350,14 @@ Status values: planned · IN PROGRESS · DONE · BLOCKED (one-line reason) · RE
   plan 003's e2e probe-form test deliberately checks only horizontal overflow. When 012
   styles the forms, add the tap-target assertion to the admin specs.
 
-- **Time zone.** 009 formats alert times in UTC because no zone setting exists; 011 then
+- **Time zone.** 026 (formerly 009) formats alert times in UTC because no zone setting exists; 011 then
   introduces `Calendar:TimeZone` (validated IANA id, `tzdata` added to the Alpine runtime
   image). Once 011 lands, alerts should use the same zone — or promote it to a
   household-wide setting.
-- **Alerts at boot.** 009 mails only transitions between known states, so a probe that is
-  already down when the API starts sends no alert until it recovers and fails again.
-  Deliberate (it prevents a mail storm on every restart); revisit if that gap matters.
+- ~~**Alerts at boot.**~~ — **retired by plan 026**: the outage is persisted as
+  `Probe.DownSince`, so a restart neither re-mails nor misses anything. One visible effect on
+  upgrade: each probe already down gets a Down row on its first poll, `Skipped` because alerts
+  are not set up yet.
 - **Verify at execution** (flagged inside the plans): SMBLibrary 1.5.8's authentication
   method signature (004), SharpSnmpLib 12.5.7's GET call shape and net10.0 compatibility
   (005), TipTap under the report-only CSP in a real browser (007).
