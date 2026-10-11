@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { Pause, Pencil, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 import {
   ALERT,
@@ -39,6 +39,7 @@ import {
 import {
   useCreateProbe,
   useDeleteProbe,
+  usePollProbe,
   useProbes,
   useReorderProbes,
   useSetProbePaused,
@@ -55,18 +56,19 @@ const CREATABLE_KINDS: readonly ('ping' | 'http' | 'message')[] = ['ping', 'http
 
 /*
  * One grid per row, so every row and the header must share exactly this template or the columns
- * stop lining up — hence the fixed 216px action column (five 40px buttons and a divider) rather
- * than `auto`. Below `lg` a row folds instead: position, name and status on the first line, kind,
- * target and interval on the second, actions on the third, as the canvas's 412px artboard draws
- * it. A table at that width would need a sideways scroll for every row.
+ * stop lining up — hence the fixed 256px action column (six 40px buttons and a divider; "Poll
+ * now" made it six, plan 027) rather than `auto`. Below `lg` a row folds instead: position, name
+ * and status on the first line, kind, target and interval on the second, actions on the third, as
+ * the canvas's 412px artboard draws it. A table at that width would need a sideways scroll for
+ * every row.
  */
 const ROW_GRID =
-  'grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[28px_116px_minmax(0,1.15fr)_72px_minmax(0,1.5fr)_64px_216px] lg:gap-x-3.5'
+  'grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[28px_116px_minmax(0,1.15fr)_72px_minmax(0,1.5fr)_64px_256px] lg:gap-x-3.5'
 
 /**
  * The probe admin page: every probe, sectioned and ordered exactly as the dashboard lays them out
- * by default (`probeSections`), each row with move / edit / pause / delete. Edit opens the form
- * inside the row; the add form waits at the bottom.
+ * by default (`probeSections`), each row with move / edit / poll now / pause / delete. Edit opens
+ * the form inside the row; the add form waits at the bottom.
  */
 export function AdminProbesPage() {
   useDocumentTitle(pageTitle('Probes', 'Admin'))
@@ -276,6 +278,7 @@ function ProbeRow({
 }) {
   const { probe, alsoIn } = row
   const setPaused = useSetProbePaused()
+  const pollProbe = usePollProbe()
   const deleteProbe = useDeleteProbe()
   const state = probe.isPaused ? 'paused' : probe.status
   const editorId = `probe-editor-${probe.id}`
@@ -333,6 +336,14 @@ function ProbeRow({
             aria-controls={isEditing ? editorId : undefined}
           />
           <IconButton
+            icon={RefreshCw}
+            label={`Poll ${probe.name} now`}
+            title={probe.isPaused ? 'Poll now — unpause first' : pollProbe.isPending ? 'Polling…' : 'Poll now'}
+            onClick={() => pollProbe.mutate(probe.id)}
+            disabled={probe.isPaused || pollProbe.isPending}
+            isBusy={pollProbe.isPending}
+          />
+          <IconButton
             icon={probe.isPaused ? Play : Pause}
             label={probe.isPaused ? `Unpause ${probe.name}` : `Pause ${probe.name}`}
             title={probe.isPaused ? 'Unpause' : 'Pause'}
@@ -369,6 +380,17 @@ function ProbeRow({
           onCancel={onCancelDelete}
           isPending={deleteProbe.isPending}
         />
+      ) : null}
+      {/*
+        A poll that ran shows in the row's chip whatever it found, Down included — that is not an
+        error. What lands here is a poll that never ran (a 409: paused meanwhile, or already being
+        polled) or a request that failed; without it the button would just stop spinning. It clears
+        on the next press.
+      */}
+      {pollProbe.isError ? (
+        <p role="alert" className="border-t border-down/40 bg-down-bg px-4 py-2.5 text-[13.5px] font-medium text-down">
+          {problemDetail(pollProbe.error) ?? `Could not poll ${probe.name}. Try again.`}
+        </p>
       ) : null}
       {isEditing ? (
         <div id={editorId}>

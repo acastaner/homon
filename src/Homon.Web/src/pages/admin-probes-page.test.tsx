@@ -233,6 +233,68 @@ describe('AdminProbesPage', () => {
     )
   })
 
+  it('Poll now POSTs an empty JSON body for that probe, then refetches the list (plan 027)', async () => {
+    const calls = stubFetch({
+      ...oneProbe,
+      '/api/v1/probes/probe-1/poll': {
+        status: 200,
+        body: { ...oneProbe['/api/v1/probes'].body[0], status: 'down', lastDetail: 'ping: TimedOut' },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbesPage />)
+
+    await waitFor(() => expect(screen.getByText('NAS')).toBeInTheDocument())
+    const listFetchesBefore = calls.filter((call) => call.path === '/api/v1/probes').length
+
+    await user.click(screen.getByRole('button', { name: 'Poll NAS now' }))
+
+    await waitFor(() =>
+      expect(calls.filter((call) => call.path === '/api/v1/probes').length).toBeGreaterThan(listFetchesBefore),
+    )
+    const pollCall = calls.find((call) => call.path === '/api/v1/probes/probe-1/poll')
+    expect(pollCall?.init?.method).toBe('POST')
+    // No body to send, but the endpoint still requires application/json — its CSRF guard.
+    expect(pollCall?.init?.body).toBe('{}')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('Poll now is disabled for a paused probe', async () => {
+    stubFetch({
+      ...oneProbe,
+      '/api/v1/probes': { body: [{ ...oneProbe['/api/v1/probes'].body[0], isPaused: true, status: 'paused' }] },
+    })
+
+    renderWithProviders(<AdminProbesPage />)
+
+    await waitFor(() => expect(screen.getByText('NAS')).toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: 'Poll NAS now' })).toBeDisabled()
+  })
+
+  it("a poll that could not run shows the API's reason under the row", async () => {
+    stubFetch({
+      ...oneProbe,
+      '/api/v1/probes/probe-1/poll': {
+        status: 409,
+        body: {
+          title: 'A poll is already running',
+          detail: 'This probe is being polled right now. Its result will show when that poll finishes.',
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AdminProbesPage />)
+
+    await waitFor(() => expect(screen.getByText('NAS')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Poll NAS now' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This probe is being polled right now.')
+  })
+
   it('the move button sends the swapped order', async () => {
     const calls = stubFetch({ ...twoProbes, '/api/v1/probes/order': { status: 204 } })
     const user = userEvent.setup()

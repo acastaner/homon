@@ -14,6 +14,11 @@ type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title' | '
   title?: string
   tone?: 'default' | 'danger'
   iconSize?: number
+  /**
+   * Work this button started is still running ("Poll now", plan 027): sets `aria-busy` and turns
+   * the icon, for as long as the work takes. Pair it with `disabled`.
+   */
+  isBusy?: boolean
 }
 
 /**
@@ -27,6 +32,7 @@ export function IconButton({
   title,
   tone = 'default',
   iconSize = 16,
+  isBusy = false,
   children,
   ...rest
 }: IconButtonProps) {
@@ -36,9 +42,21 @@ export function IconButton({
       aria-label={label}
       title={title ?? label}
       className={tone === 'danger' ? ICON_BUTTON_DANGER : ICON_BUTTON}
+      aria-busy={isBusy || undefined}
       {...rest}
     >
-      {Icon ? <Icon aria-hidden="true" size={iconSize} strokeWidth={2} /> : children}
+      {Icon ? (
+        <Icon
+          aria-hidden="true"
+          size={iconSize}
+          strokeWidth={2}
+          // motion-safe: a reader who asked for reduced motion still has aria-busy and the
+          // disabled state; a spinner that ignores that preference is the one thing to avoid.
+          className={isBusy ? 'motion-safe:animate-spin' : undefined}
+        />
+      ) : (
+        children
+      )}
     </button>
   )
 }

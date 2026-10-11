@@ -170,3 +170,18 @@ export function useSetProbePaused() {
     onSuccess: () => invalidateProbesAndStatus(queryClient),
   })
 }
+
+/**
+ * "Poll now" (plan 027): one real poll of one probe, through the scheduler's own poller, and the
+ * probe as it stands afterwards. The request waits for the poll — up to the API's per-poll timeout,
+ * 30 s by default — so `isPending` is the whole poll. `'{}'` because the endpoint has no body but
+ * still requires `application/json`, its CSRF guard (same as `useSendTestAlert`).
+ */
+export function usePollProbe() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<Probe>(`/probes/${id}/poll`, { method: 'POST', body: '{}' }),
+    onSuccess: () => invalidateProbesAndStatus(queryClient),
+  })
+}

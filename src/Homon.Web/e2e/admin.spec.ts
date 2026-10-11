@@ -70,6 +70,10 @@ test.describe('the HTTP probe form (plan 003)', () => {
 
     await row.getByRole('button', { name: `Pause ${probeName}` }).click()
     await expect(row.getByRole('button', { name: `Unpause ${probeName}` })).toBeVisible()
+    // Plan 027: a paused probe is never polled, so its "Poll now" is off. Only the disabled state
+    // is checked here — pressing it on a live probe would poll for real, and the gate must make no
+    // outbound request; the poll path itself is ProbePollEndpointTests'.
+    await expect(row.getByRole('button', { name: `Poll ${probeName} now` })).toBeDisabled()
 
     await expectNoHorizontalOverflow(page)
   })
