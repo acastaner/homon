@@ -48,7 +48,8 @@ top of the same model.
   body, maps every failure mode — timeout, connection, TLS, unreadable credentials — to its
   own `Detail` sentence); `ProbeScheduler` (one tick-based `BackgroundService` that scans for
   due probes and dispatches polls under a bounded-concurrency gate, rather than a per-probe
-  timer); `ProbeObservationRetentionService` (an hourly sweep that deletes observations older
+  timer); `ProbePoller` (plan 027 — the poll itself, shared by the scheduler and "Poll now",
+  whose in-flight set keeps the two from polling one probe at once); `ProbeObservationRetentionService` (an hourly sweep that deletes observations older
   than the retention window); `ProbeUptimeCalculator`; `MonitoringOptions` (the tick
   interval, concurrency limit, per-poll timeout, retention window, sparkline bucket count —
   all environment-configurable, none admin-UI configurable yet).
@@ -57,7 +58,8 @@ top of the same model.
 - `Homon.Infrastructure/Persistence/Configurations/` — one `IEntityTypeConfiguration<T>` per
   entity above. `ProbeKind`/`ProbeStatus` map to `varchar` (`HasConversion<string>()`), not
   the default `int` — readable in `psql`, immune to a later member reordering the enum.
-- `Homon.Api/Endpoints/ProbeEndpoints.cs` — admin CRUD, pause and reorder under `/probes`,
+- `Homon.Api/Endpoints/ProbeEndpoints.cs` — admin CRUD, pause, poll now (`POST
+  /probes/{id}/poll`, plan 027) and reorder under `/probes`,
   including `kind: "http"` and its `http` options object (plan 003). `GET` admits an
   Administrator session or a valid, unexpired API key of either scope; every write stays
   Administrator-session-only. `ProbeGroupEndpoints.cs` — CRUD, reorder and membership under

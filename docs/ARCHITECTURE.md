@@ -1011,6 +1011,33 @@ how long it was down.
 - **The Admin home stays client-side** (§3.30). Alerts is its eighth summary query, the threshold
   §3.30 named; one small GET is accepted.
 
+### 3.32 A poll can be asked for, and it is the same poll
+
+Plan 027. Each row of `/admin/probes` has a "Poll now" button, which calls
+`POST /api/v1/probes/{id}/poll` and waits for the result.
+
+- **One poller, two callers.** `ProbePoller` (a singleton) owns the poll: runner, per-poll timeout,
+  `Probe.RecordObservation`, the observation row, the outage outbox row, one save.
+  `ProbeScheduler` decides only *which* probes are due and hands each one to it, and the endpoint
+  calls the same instance. So a manual poll counts toward the failure threshold, can declare a
+  probe Down or Up and send the mail (§3.31), and moves `LastObservedAt` forward, which pushes the
+  next scheduled poll a full interval out. *Rejected*: making the scheduler a singleton as well as
+  a hosted service and calling into it from the API. That mixes *when* with *how* and exposes its
+  internals across assemblies.
+- **The poller's in-flight set is what prevents overlap**, for scheduled and manual polls alike.
+  A second request for a probe that is mid-poll returns `AlreadyPolling` straight away (409); it
+  neither waits nor polls again. The database cannot provide this guarantee, because
+  `LastObservedAt` is written only when a poll finishes.
+- **A started poll runs to the end.** The endpoint passes `ApplicationStopping`, not the request's
+  token. A closed tab would otherwise cancel the runner, and the timeout handler would record a
+  "probe timed out" failure that never happened. The request is bounded by
+  `MonitoringOptions.PerPollTimeout` (30 s), which is under the production proxy's 60 s
+  `proxy_read_timeout`.
+- **Administrator session only**, like every other probe write. It takes no body but still
+  requires `application/json` (the CSRF guard, as `POST /alerts/test` does). A paused probe is
+  refused (409) and its button is disabled. Manual polls bypass `MaxConcurrentPolls`: one click
+  polls one probe.
+
 ## 4. Things this record does not yet decide
 
 The calendar provider. It is a module plan's decision and will be recorded here when made.
