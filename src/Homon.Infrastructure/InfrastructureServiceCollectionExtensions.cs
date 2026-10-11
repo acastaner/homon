@@ -200,6 +200,9 @@ public static class InfrastructureServiceCollectionExtensions
             });
         services.AddScoped<IProbeRunner, HttpProbeRunner>();
 
+        // A singleton, not scoped: its in-flight set is what keeps the scheduler and "Poll now"
+        // (plan 027) from polling the same probe at once, so both must hold the same instance.
+        services.AddSingleton<ProbePoller>();
         services.AddHostedService<ProbeScheduler>();
         services.AddHostedService<ProbeObservationRetentionService>();
     }

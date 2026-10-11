@@ -9,7 +9,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Homon.Api.Tests;
 
 /// <summary>
-/// Exercises <see cref="ProbeScheduler.TickAsync"/> directly, with a fake <see cref="IProbeRunner"/>
+/// Exercises <see cref="ProbeScheduler.TickAsync"/> and <see cref="ProbePoller.PollAsync"/>
+/// directly, with a fake <see cref="IProbeRunner"/>
 /// and a <see cref="FixedTimeProvider"/> — never through the hosted loop (that stays disabled
 /// for every test host; see <c>HomonApiFactory</c>).
 /// </summary>
@@ -88,7 +89,7 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
 
         // The probe is still mid-poll (blocked on `release`) — a second tick must see it
         // still "due" by the database (LastObservedAt not yet written) but must not dispatch
-        // a second poll: the _inFlight set is what stops it, not the database state.
+        // a second poll: the poller's in-flight set is what stops it, not the database state.
         await scheduler.TickAsync(CancellationToken.None);
 
         release.SetResult();
@@ -290,6 +291,94 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
         }
     }
 
+    [DatabaseFact]
+    public async Task Poll_now_while_a_scheduled_poll_is_running_does_nothing_and_says_so()
+    {
+        // Plan 027: the scheduler and "Poll now" share one poller, so its in-flight set covers
+        // both — the manual call must neither wait nor run a second poll alongside the first.
+        var probe = await SeedProbeAsync(lastObservedAt: null);
+
+        var started = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var callCount = 0;
+
+        var runner = new FakeProbeRunner(async (polled, _) =>
+        {
+            if (polled.Id == probe.Id)
+            {
+                Interlocked.Increment(ref callCount);
+                started.TrySetResult();
+                await release.Task;
+            }
+
+            return new ProbeResult(true, 1.0, null);
+        });
+
+        var timeProvider = new FixedTimeProvider(Epoch);
+        var poller = BuildPoller(runner, timeProvider);
+        var scheduler = BuildScheduler(poller, timeProvider);
+
+        var tick = scheduler.TickAsync(CancellationToken.None);
+        await started.Task;
+
+        var outcome = await poller.PollAsync(probe.Id, CancellationToken.None);
+
+        release.SetResult();
+        await tick;
+
+        Assert.Equal(ProbePollOutcome.AlreadyPolling, outcome);
+        Assert.Equal(1, callCount);
+    }
+
+    [DatabaseFact]
+    public async Task Poll_now_polls_a_probe_inside_its_interval_and_restarts_the_interval_from_there()
+    {
+        var probe = await SeedProbeAsync(lastObservedAt: Epoch - TimeSpan.FromSeconds(10), pollInterval: TimeSpan.FromSeconds(60));
+        var runner = new FakeProbeRunner((_, _) => Task.FromResult(new ProbeResult(false, null, "ping: TimedOut")));
+
+        var clock = new FixedTimeProvider(Epoch);
+        var poller = BuildPoller(runner, clock);
+        var scheduler = BuildScheduler(poller, clock);
+
+        var outcome = await poller.PollAsync(probe.Id, CancellationToken.None);
+
+        // 55 s after the manual poll: due by the old LastObservedAt (65 s), not by the new one.
+        clock.Advance(TimeSpan.FromSeconds(55));
+        await scheduler.TickAsync(CancellationToken.None);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+
+        Assert.Equal(ProbePollOutcome.Polled, outcome);
+        var reloaded = await database.Probes.SingleAsync(p => p.Id == probe.Id);
+        Assert.Equal(Epoch, reloaded.LastObservedAt);
+        Assert.Equal(1, reloaded.ConsecutiveFailureCount);
+        var observation = await database.ProbeObservations.SingleAsync(o => o.ProbeId == probe.Id);
+        Assert.False(observation.Succeeded);
+    }
+
+    [DatabaseFact]
+    public async Task Poll_now_refuses_a_paused_probe_and_an_unknown_id()
+    {
+        var paused = await SeedProbeAsync(lastObservedAt: null, isPaused: true);
+        var callCount = 0;
+        var runner = new FakeProbeRunner((_, _) =>
+        {
+            Interlocked.Increment(ref callCount);
+            return Task.FromResult(new ProbeResult(true, 1.0, null));
+        });
+
+        var poller = BuildPoller(runner, new FixedTimeProvider(Epoch));
+
+        Assert.Equal(ProbePollOutcome.Paused, await poller.PollAsync(paused.Id, CancellationToken.None));
+        Assert.Equal(ProbePollOutcome.NotFound, await poller.PollAsync(Guid.NewGuid(), CancellationToken.None));
+        Assert.Equal(0, callCount);
+
+        using var scope = factory.Services.CreateScope();
+        var database = scope.ServiceProvider.GetRequiredService<HomonDbContext>();
+        Assert.Equal(0, await database.ProbeObservations.CountAsync(o => o.ProbeId == paused.Id));
+    }
+
     /// <summary>
     /// A zero-interval probe is due on every tick for the rest of the class, so a test that seeds
     /// one removes it: <c>Overlapping_ticks_never_double_poll_a_still_running_probe</c> counts
@@ -331,11 +420,23 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
         BuildScheduler(runner, new FixedTimeProvider(now));
 
     private ProbeScheduler BuildScheduler(IProbeRunner runner, TimeProvider timeProvider) =>
+        BuildScheduler(BuildPoller(runner, timeProvider), timeProvider);
+
+    /// <summary>A scheduler over a given poller, so a test can also call that poller by hand — as "Poll now" does.</summary>
+    private ProbeScheduler BuildScheduler(ProbePoller poller, TimeProvider timeProvider) =>
+        new(
+            factory.Services.GetRequiredService<IServiceScopeFactory>(),
+            poller,
+            new StaticOptionsMonitor<MonitoringOptions>(new MonitoringOptions()),
+            timeProvider,
+            NullLogger<ProbeScheduler>.Instance);
+
+    private ProbePoller BuildPoller(IProbeRunner runner, TimeProvider timeProvider) =>
         new(
             new SingleRunnerScopeFactory(factory.Services, runner),
             new StaticOptionsMonitor<MonitoringOptions>(new MonitoringOptions()),
             timeProvider,
-            NullLogger<ProbeScheduler>.Instance);
+            NullLogger<ProbePoller>.Instance);
 
     /// <summary>
     /// Wraps the factory's own <see cref="IServiceScopeFactory"/> so every scope it creates
@@ -366,13 +467,5 @@ public class ProbeSchedulerTests(ApiDatabaseFactory factory) : IClassFixture<Api
                 return inner.GetService(serviceType);
             }
         }
-    }
-
-    private sealed class FakeProbeRunner(Func<Probe, CancellationToken, Task<ProbeResult>> run) : IProbeRunner
-    {
-        public ProbeKind Kind => ProbeKind.Ping;
-
-        public Task<ProbeResult> RunAsync(Probe probe, CancellationToken cancellationToken) =>
-            run(probe, cancellationToken);
     }
 }

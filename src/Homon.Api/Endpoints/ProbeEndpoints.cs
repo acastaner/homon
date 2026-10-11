@@ -1,5 +1,6 @@
 using Homon.Api.Authentication;
 using Homon.Domain.Monitoring;
+using Homon.Infrastructure.Monitoring;
 using Homon.Infrastructure.Persistence;
 using Homon.Infrastructure.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Homon.Api.Endpoints;
 
 /// <summary>
-/// Admin CRUD, pause and reorder for <see cref="Probe"/>, under <c>/probes</c>.
+/// Admin CRUD, pause, poll-now and reorder for <see cref="Probe"/>, under <c>/probes</c>.
 /// </summary>
 /// <remarks>
 /// <c>GET</c> admits an Administrator session or a valid, unexpired API key of either scope
@@ -50,6 +51,21 @@ internal static class ProbeEndpoints
             .RequireAuthorization(HomonPolicies.Administrator)
             .WithName("SetProbePaused")
             .WithSummary("Pauses or unpauses a probe.");
+
+        // Ok<ProbeResponse> and NotFound describe themselves to the OpenAPI document; a problem
+        // result and a bare status code carry no metadata, so the 409 (paused, already polling, no
+        // runner) and the 415 (the CSRF guard) are declared here or the contract would omit them.
+        group.MapPost("/{id:guid}/poll", PollProbeAsync)
+            .RequireAuthorization(HomonPolicies.Administrator)
+            .WithName("PollProbe")
+            .WithSummary("Polls a probe now and returns it with the result. Waits for the poll, up to the per-poll timeout.")
+            .WithDescription(
+                "Runs one real poll through the scheduler's own poller: it counts toward the failure threshold, "
+                + "can send a Down or Up alert, and restarts the probe's poll interval. Takes no body but requires "
+                + "Content-Type: application/json. 409 when the probe is paused, is already being polled, or has "
+                + "no runner for its kind.")
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status415UnsupportedMediaType);
 
         group.MapDelete("/{id:guid}", DeleteProbeAsync)
             .RequireAuthorization(HomonPolicies.Administrator)
@@ -237,6 +253,66 @@ internal static class ProbeEndpoints
         }
 
         await database.SaveChangesAsync(cancellationToken);
+
+        var groupIds = await database.Set<ProbeGroupMembership>()
+            .Where(m => m.ProbeId == id)
+            .Select(m => m.GroupId)
+            .ToArrayAsync(cancellationToken);
+
+        return TypedResults.Ok(ToResponse(probe, groupIds));
+    }
+
+    private static async Task<Results<Ok<ProbeResponse>, NotFound, ProblemHttpResult, StatusCodeHttpResult>> PollProbeAsync(
+        Guid id,
+        HttpContext httpContext,
+        HomonDbContext database,
+        ProbePoller poller,
+        IHostApplicationLifetime lifetime,
+        CancellationToken cancellationToken)
+    {
+        // No bound body, so nothing else demands the application/json content type that
+        // closes the CSRF guard — same check as AlertEndpoints.SendTestAsync.
+        if (httpContext.Request.ContentType?.StartsWith(
+                "application/json", StringComparison.OrdinalIgnoreCase) is not true)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+        }
+
+        // ApplicationStopping, not the request's token: a poll once started runs to the end,
+        // bounded by MonitoringOptions.PerPollTimeout. Were the request's token passed and the
+        // administrator closed the tab mid-poll, the poller's linked timeout source would cancel
+        // with it and the poll would be recorded as "probe timed out" — a failure that never
+        // happened, counted toward the failure threshold.
+        var outcome = await poller.PollAsync(id, lifetime.ApplicationStopping);
+
+        switch (outcome)
+        {
+            case ProbePollOutcome.NotFound:
+                return TypedResults.NotFound();
+            case ProbePollOutcome.Paused:
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "The probe is paused",
+                    detail: "A paused probe is never polled. Unpause it first.");
+            case ProbePollOutcome.AlreadyPolling:
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "A poll is already running",
+                    detail: "This probe is being polled right now. Its result will show when that poll finishes.");
+            case ProbePollOutcome.NoRunner:
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "This kind of probe cannot be polled yet",
+                    detail: "No runner is installed for this probe's kind.");
+        }
+
+        // Read after the poll, in this request's own context: the poller saved through a scope of
+        // its own, and nothing here has loaded the probe yet, so this is the row as it now stands.
+        var probe = await database.Probes.FindAsync([id], cancellationToken);
+        if (probe is null)
+        {
+            return TypedResults.NotFound(); // deleted in the instant since the poll saved
+        }
 
         var groupIds = await database.Set<ProbeGroupMembership>()
             .Where(m => m.ProbeId == id)
