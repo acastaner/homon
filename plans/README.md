@@ -13,6 +13,25 @@ about a plan changes when it moves: paths written *inside* an archived plan are 
 at execution time (see `archive/README.md`), because a plan is a record and rewriting it would make
 it a worse one.
 
+**027 is merged.** `main` carries its four commits, `f7d3f1d`…`86e5a62`, fast-forwarded from `fd4f2e9`
+on 2026-10-11 on the maintainer's word, and tagged `v0.9.0` the same day. The plan's manual browser
+check was not recorded before the merge. Each row of `/admin/probes` now has a **Poll now** button,
+which calls `POST /api/v1/probes/{id}/poll`, Administrator only. The call runs one real poll through
+`ProbePoller`, the singleton that now owns the poll for both the scheduler and the button
+(`docs/ARCHITECTURE.md` §3.32), so a manual poll counts toward the threshold, can send an alert, and
+restarts the interval.
+
+It was executed in this checkout and reviewed independently. The reviewer re-ran the suites one at a
+time: `web` → 264 (261 before), `api` → 521 passed with 0 skips (513 before), `e2e` → 149. The
+verdict was APPROVE, with four non-blocking points. One was fixed before the merge: the endpoint's
+responses were missing from the OpenAPI document (`api` → 522). The other three remain, recorded in
+the plan:
+- a stale poll-error line survives a Pause or Edit;
+- a probe shown in two groups returns 409 on its second row;
+- a runner that ignores its token can hold the request open until nginx's 60 s limit.
+
+No migration and no configuration change, so deploying it is just the new image.
+
 **026 is merged.** `main` carries its five commits, `cf5164a`…`13c2770`, plus the plan itself
 (`7b5dbbc`), fast-forwarded from `79dfe0a` on 2026-10-08 on the maintainer's word after a manual
 check in a browser on the branch. It supersedes 009. Homon now mails when a probe is declared Down
@@ -191,7 +210,7 @@ reviews and merges the work.
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
 | 025 | DONE (2026-10-07, `1202c67`, released `v0.7.0`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
 | 026 | DONE (2026-10-08, `13c2770`) | L | — (builds on 002, 003, 021, 023, 025) | Alerts by email: a Down mail and a back-Up mail with the downtime, the Resend key, sender and recipients set on `/admin/alerts`, delivered through a durable outbox with a "Recent alerts" list — supersedes 009 |
-| 027 | IN PROGRESS (executed on `plan/027-poll-a-probe-now`, awaiting the maintainer's browser check) | S | — (builds on 002, 024, 025, 026) | "Poll now" on each `/admin/probes` row: one real poll through the scheduler's own `ProbePoller`, at once, with the result in the row |
+| 027 | DONE (2026-10-11, `86e5a62`, released `v0.9.0`) | S | — (builds on 002, 024, 025, 026) | "Poll now" on each `/admin/probes` row: one real poll through the scheduler's own `ProbePoller`, at once, with the result in the row |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
