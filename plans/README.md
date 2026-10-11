@@ -191,6 +191,7 @@ reviews and merges the work.
 | 024 | DONE (2026-10-07, `9adce5f`, released `v0.6.0`) | S | — (builds on 002, 012, 023) | The probe admin page lists probes in the dashboard's sections and order, with icon row actions and an inline editor |
 | 025 | DONE (2026-10-07, `1202c67`, released `v0.7.0`) | L | — (builds on 012, 021, 024) | Every admin page follows the Probes page's look: shared admin primitives, sectioned tables, icon row actions, inline confirm and edit, short dates, a live Admin home (design: <https://claude.ai/artifact/8Rw21YgG8M2exz7wtSPv9T>) |
 | 026 | DONE (2026-10-08, `13c2770`) | L | — (builds on 002, 003, 021, 023, 025) | Alerts by email: a Down mail and a back-Up mail with the downtime, the Resend key, sender and recipients set on `/admin/alerts`, delivered through a durable outbox with a "Recent alerts" list — supersedes 009 |
+| 027 | IN PROGRESS (executed on `plan/027-poll-a-probe-now`, awaiting the maintainer's browser check) | S | — (builds on 002, 024, 025, 026) | "Poll now" on each `/admin/probes` row: one real poll through the scheduler's own `ProbePoller`, at once, with the result in the row |
 
 **Current run (2026-09-15/16):** 013 → 002 → 003 → 006 → 007 → 010 → 012, each on its own
 branch, merged to `main` after a green `./ci/run-ci.sh`. 004, 005, 008, 009 and 011 are
