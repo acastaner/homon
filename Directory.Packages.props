@@ -63,7 +63,7 @@
       list (client, admin-page-editor-page.tsx) and this sanitiser's allow-list
       (PageHtmlSanitizer.cs) must change together — see Maintenance notes.
     -->
-    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
+    <PackageVersion Include="HtmlSanitizer" Version="10.0.1120" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
