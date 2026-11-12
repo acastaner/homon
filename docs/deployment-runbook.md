@@ -18,9 +18,9 @@ is public, so no registry credential is needed to pull.
 | Host | `clockmaster` (Ubuntu 24.04, bare metal) |
 | Docker | **rootless**, under the `dockersvc` service account — every command below runs as that user, no `sudo` |
 | Compose directory | `/home/dockersvc/docker-apps/homon/` — the host's convention, one directory per app |
-| Port | **8102**, bound `0.0.0.0` — the host's convention (next in sequence after `chronolectum-mcp` on 8101) |
+| Port | **8102** (next in sequence after `chronolectum-mcp` on 8101). `compose.prod.yaml` binds every interface by default; this host overrides that and has bound `127.0.0.1` since 2026-09-30, so the LAN reaches Homon only through the host's edge nginx over HTTPS |
 | Access control | the network in front: FortiWeb's virtual server rules for anything internet-facing; the LAN otherwise. Homon itself leaves readers anonymous (`HOMON_REQUIRE_SIGN_IN_FOR_READERS=false`) |
-| Backups | the host's restic job backs up `/home/dockersvc/docker-apps/` nightly — which is why `compose.prod.yaml` bind-mounts PostgreSQL's data at `./data/postgres` instead of using a named volume. The data-protection key ring **is** a named volume and is not covered; see below |
+| Backups | the host's restic job backs up `/home/dockersvc/docker-apps/` nightly, but **not** PostgreSQL's bind-mounted data at `./data/postgres`: under rootless Docker that directory is unreadable to the backup account, so it is excluded. A systemd user timer at 02:30 writes a verified `pg_dump` into `./dumps/` and exports the data-protection key ring (a named volume) as a tarball, and restic picks both up at 03:00 |
 
 ## First bring-up
 
